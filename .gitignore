@@ -1,0 +1,27 @@
+# credentials
+.env
+
+# MIMIC data — credentialed, redistribution prohibited under the DUA
+note/
+tier2/
+tier2processed/
+model/
+cohort_300.csv
+*.parquet
+*.csv.gz
+
+# build artefacts
+grus-env/
+__pycache__/
+*.pyc
+pglayer/
+layer/
+*.zip
+
+# local state
+agentcore_runtime.json
+scenario_state.json
+.vscode/
+
+# notebooks
+*.ipynb
