@@ -109,6 +109,7 @@ class Retriever:
         self.hadm_id = hadm_id
         self.as_of = as_of_hours
 
+        print(f"DEBUG Retriever: conn id={id(conn)}, autocommit={conn.autocommit}", flush=True)
         row = conn.execute(
             "SELECT subject_id FROM admissions WHERE hadm_id = %s", (hadm_id,)
         ).fetchone()

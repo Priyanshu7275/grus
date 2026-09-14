@@ -134,8 +134,9 @@ def _trace_context(conn, hadm_id, trace_id):
 def _patient_context(conn, hadm_id, as_of_hours):
     """A short orienting header so the model does not waste a round."""
     row = conn.execute("""
-        SELECT p.anchor_age, p.gender, a.admission_type, a.arrival_unit,
-               a.cohort,
+        SELECT p.anchor_age AS anchor_age, p.gender AS gender,
+               a.admission_type AS admission_type,
+               a.arrival_unit AS arrival_unit, a.cohort AS cohort,
                (SELECT COUNT(*) FROM admissions pa
                  WHERE pa.subject_id = a.subject_id AND pa.is_current = FALSE)
                  AS prior

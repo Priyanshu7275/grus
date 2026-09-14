@@ -41,7 +41,7 @@ REGION = AWS.REGION
 # once a card is on the account; the Verifier is the one place where
 # stronger reasoning genuinely helps.
 FAST_MODEL = AWS.FAST_MODEL
-REASONING_MODEL = AWS.REASONING_MODEL
+REASONING_MODEL = AWS.REASONING_PREFERRED
 
 
 

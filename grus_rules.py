@@ -18,6 +18,7 @@ import psycopg
 from dataclasses import dataclass, field
 from typing import Optional
 from grus_config import DB
+from psycopg.rows import tuple_row
 
 
 
