@@ -30,7 +30,7 @@ const BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
 // so the app should still look and work like a finished product. Swapping
 // in the real backend later needs no frontend changes — these same
 // functions just start resolving from `request()` instead.
-const TIMEOUT_MS = 30000;
+const TIMEOUT_MS = 120000;
 
 let demoMode = false;
 /** True once any call has fallen back to demo data this session. Not
