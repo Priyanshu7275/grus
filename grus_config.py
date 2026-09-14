@@ -54,15 +54,15 @@ class AWS:
     REGION = os.environ.get("AWS_REGION", "ap-south-1")
     BUCKET = os.environ.get("GRUS_BUCKET", "grus-mimic-data-etl")
 
-    # Bedrock. Qwen does the structured work; the reasoning slot is
-    # Claude when the account can reach it. Anthropic models on Bedrock
-    # bill through AWS Marketplace, which does not accept every payment
-    # method — REASONING_MODEL falls back to Qwen so the graph still
-    # completes, and REASONING_PREFERRED records what it should be.
+    # Bedrock. Qwen does the structured work. The reasoning slot uses
+    # Nova Pro — billed directly through AWS rather than AWS Marketplace,
+    # which avoids the payment-instrument restrictions that blocked
+    # Anthropic models on this account. REASONING_MODEL falls back to
+    # Qwen if the preferred model is ever unreachable.
     FAST_MODEL = os.environ.get("GRUS_FAST_MODEL", "qwen.qwen3-32b-v1:0")
     REASONING_MODEL = os.environ.get("GRUS_REASONING_MODEL",
                                      "qwen.qwen3-32b-v1:0")
-    REASONING_PREFERRED = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+    REASONING_PREFERRED = "apac.amazon.nova-pro-v1:0"
     EMBED_MODEL = os.environ.get("GRUS_EMBED_MODEL",
                                  "amazon.titan-embed-text-v2:0")
 

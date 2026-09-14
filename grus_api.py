@@ -32,7 +32,7 @@ from datetime import datetime
 from typing import Optional, List, Dict, Any
 
 import psycopg
-from psycopg.rows import dict_row
+from psycopg.rows import dict_row, tuple_row
 from grus_config import DB
 from fastapi import FastAPI, HTTPException, Query, BackgroundTasks, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -72,11 +72,33 @@ def get_conn():
         row_factory=dict_row,
     )
     conn.execute("SET search_path TO grus, public")
+    conn.commit()
     try:
         yield conn
     finally:
         conn.close()
 
+def get_conn_tuple():
+    """
+    Same connection, but tuple rows.
+
+    grus_rules.py and grus_score_engine.py index results positionally
+    (row[0], row[1]) rather than by column name. Any endpoint that calls
+    evaluate() or ScoreEngine must use this, not get_conn — a dict-row
+    connection makes positional indexing raise KeyError.
+    """
+    conn = psycopg.connect(
+        host=HOST, port=5432, dbname="grus", user="grusadmin",
+        password=PWD, sslmode="require",
+        keepalives=1, keepalives_idle=30, connect_timeout=15,
+        row_factory=tuple_row,
+    )
+    conn.execute("SET search_path TO grus, public")
+    conn.commit()
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 def _num(v):
     """Decimal and NUMERIC come back as Decimal; JSON cannot hold them."""
@@ -271,7 +293,7 @@ def get_brief(
         None, description="Cap the record at this many hours after "
                           "arrival. Omit for the full record."),
     refresh: bool = False,
-    conn=Depends(get_conn),
+    conn=Depends(get_conn_tuple),
 ):
     """
     Generate the brief through the Strands agent graph.
@@ -342,7 +364,7 @@ def get_brief(
 # ---------------------------------------------------------------
 @app.get("/patients/{hadm_id}/alerts", tags=["patients"])
 def get_alerts(hadm_id: int, as_of_hours: Optional[float] = None,
-               conn=Depends(get_conn)):
+               conn=Depends(get_conn_tuple)):
     """
     Rule engine output only. Milliseconds, no model call.
 
@@ -368,7 +390,7 @@ def get_alerts(hadm_id: int, as_of_hours: Optional[float] = None,
 @app.get("/patients/{hadm_id}/scores", tags=["patients"])
 def list_patient_scores(hadm_id: int, presentation: Optional[str] = None,
                         as_of_hours: Optional[float] = None,
-                        conn=Depends(get_conn)):
+                        conn=Depends(get_conn_tuple)):
     """
     Which validated scores are worth running for this patient.
 
@@ -390,7 +412,7 @@ def list_patient_scores(hadm_id: int, presentation: Optional[str] = None,
 @app.get("/patients/{hadm_id}/scores/{score_name}", tags=["patients"])
 def get_patient_score(hadm_id: int, score_name: str,
                       as_of_hours: Optional[float] = None,
-                      conn=Depends(get_conn)):
+                      conn=Depends(get_conn_tuple)):
     """
     Compute one score. The record fills what it can.
 
@@ -412,7 +434,7 @@ def get_patient_score(hadm_id: int, score_name: str,
 def compute_patient_score(hadm_id: int, score_name: str,
                           provided: Dict[str, Any],
                           as_of_hours: Optional[float] = None,
-                          conn=Depends(get_conn)):
+                          conn=Depends(get_conn_tuple)):
     """
     Compute a score with the clinician's answers filled in.
 
@@ -431,7 +453,7 @@ def compute_patient_score(hadm_id: int, score_name: str,
 
 @app.get("/patients/{hadm_id}/risk", tags=["patients"])
 def get_risk(hadm_id: int, as_of_hours: Optional[float] = None,
-             conn=Depends(get_conn)):
+             conn=Depends(get_conn_tuple)):
     """
     Model predictions from the SageMaker endpoints.
 
@@ -564,7 +586,7 @@ def get_source(table: str, row_id: int, conn=Depends(get_conn)):
 # 6. Chat
 # ---------------------------------------------------------------
 @app.post("/chat", tags=["chat"])
-def chat(req: ChatRequest, conn=Depends(get_conn)):
+def chat(req: ChatRequest, conn=Depends(get_conn_tuple)):
     """
     The doctor asks a question.
 
@@ -583,15 +605,15 @@ def chat(req: ChatRequest, conn=Depends(get_conn)):
         return answer(conn, req.hadm_id, req.message,
                       as_of_hours=req.as_of_hours,
                       trace_id=req.trace_id, history=req.history)
-    except ImportError:
+    except ImportError as e:
         raise HTTPException(503, {"code": "CHAT_UNAVAILABLE",
-                                  "message": "Chat agent not deployed."})
+       "message": f"Chat agent not deployed: {e}"})
 
 
 @app.get("/patients/{hadm_id}/questions", tags=["chat"])
 def get_suggested_questions(hadm_id: int,
                             as_of_hours: Optional[float] = None,
-                            conn=Depends(get_conn)):
+                            conn=Depends(get_conn_tuple)):
     """
     Questions worth asking about this patient, derived from what the
     rules found.
@@ -706,8 +728,9 @@ def _run_pipeline(hadm_id: int):
     try:
         conn = psycopg.connect(
             host=HOST, port=5432, dbname="grus", user="grusadmin",
-            password=PWD, sslmode="require", row_factory=dict_row)
+                        password=PWD, sslmode="require", row_factory=tuple_row)
         conn.execute("SET search_path TO grus, public")
+        conn.commit()
 
         st["stage"] = "embedding"
         try:
@@ -719,7 +742,7 @@ def _run_pipeline(hadm_id: int):
             for r in rows:
                 conn.execute(
                     "UPDATE note_chunks SET embedding = %s WHERE chunk_id = %s",
-                    (str(embed_text(r["text"])), r["chunk_id"]))
+                    (str(embed_text(r[1])), r[0]))
             conn.commit()
             st["chunks_embedded"] = len(rows)
         except Exception as e:
@@ -914,7 +937,7 @@ def _embed_chunk(chunk_id: int):
         from grus_embed import embed as embed_text
         conn = psycopg.connect(
             host=HOST, port=5432, dbname="grus", user="grusadmin",
-            password=PWD, sslmode="require", row_factory=dict_row)
+            password=PWD, sslmode="require", row_factory=tuple_row)
         conn.execute("SET search_path TO grus, public")
         r = conn.execute("SELECT text FROM note_chunks WHERE chunk_id = %s",
                          (chunk_id,)).fetchone()

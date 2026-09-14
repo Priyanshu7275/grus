@@ -25,3 +25,7 @@ scenario_state.json
 
 # notebooks
 *.ipynb
+# Elastic Beanstalk Files
+.elasticbeanstalk/*
+!.elasticbeanstalk/*.cfg.yml
+!.elasticbeanstalk/*.global.yml

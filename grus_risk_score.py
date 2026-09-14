@@ -61,11 +61,27 @@ MEANING = {
 }
 
 
+import boto3
+
+_s3 = boto3.client("s3", region_name=AWS.REGION)
+_S3_BUCKET = AWS.BUCKET
+_S3_PREFIX = "model-config"
+
+
 def _load(name, default=None):
+    """
+    Load a small model-config file from S3.
+
+    These are tiny lookup tables (endpoint names, thresholds), not
+    training data — fetched at import time so the server always has the
+    latest values without needing them bundled into the deployment.
+    """
+    key = f"{_S3_PREFIX}/{name}"
     try:
-        with open(f"{MODEL_DIR}/models/{name}") as f:
-            return json.load(f)
-    except FileNotFoundError:
+        obj = _s3.get_object(Bucket=_S3_BUCKET, Key=key)
+        return json.loads(obj["Body"].read())
+    except Exception as e:
+        print(f"DEBUG: failed to load {key} from S3: {e}", flush=True)
         return default
 
 
