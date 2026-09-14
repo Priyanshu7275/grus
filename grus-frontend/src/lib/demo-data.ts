@@ -873,7 +873,7 @@ export function demoBrief(hadmId: number): BriefResponse {
     generated_at: new Date().toISOString(),
     generation_ms: 640,
     brief,
-    agents_run: ["intake", "rules", "risk", "scores", "brief"],
+        agents_run: ["retriever", "reconciler", "risk", "verifier", "composer"],
     trust: { citations_valid: (h?.alerts.length || 0) + 1, citations_invalid: 0, traceable_pct: 100 },
     cached: false,
     disclaimer: "Decision support, not diagnosis. Demo data — not a real patient record.",
