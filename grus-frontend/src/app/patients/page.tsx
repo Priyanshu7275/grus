@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import Link from "next/link";
+import { Search, UserPlus } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PatientCard as PatientCardType } from "@/lib/types";
 import { PatientCard, PatientCardSkeleton } from "@/components/PatientCard";
@@ -94,7 +95,14 @@ export default function PatientsPage() {
                 {r}
               </option>
             ))}
-          </select>
+            </select>
+          <Link
+            href="/patients/new"
+            className="inline-flex items-center gap-2 rounded-xl brand-gradient px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:shadow-glow"
+          >
+            <UserPlus className="h-4 w-4" />
+            New patient
+          </Link>
         </div>
       </div>
 

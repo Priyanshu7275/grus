@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { GrusLogo } from "@/components/GrusLogo";
-import { verifyHospital, verifyCredentials, verifyOtp, DEMO_CREDENTIALS } from "@/lib/auth";
+import { verifyHospital, verifyCredentials, verifyOtp, DEMO_CREDENTIALS, login } from "@/lib/auth";
 import { Building2, Lock, Mail, Loader2, ShieldCheck, KeyRound, ArrowRight, Check } from "lucide-react";
 
 type Step = "hospital" | "credentials" | "otp";
@@ -45,6 +45,7 @@ export default function LoginPage() {
     const ok = await verifyCredentials(email, password);
     setBusy(false);
     if (ok) {
+      login();
          router.push("/patients");
     } else {
       setError("Enter your email and password.");

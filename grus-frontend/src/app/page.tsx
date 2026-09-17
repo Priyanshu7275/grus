@@ -82,28 +82,28 @@ const RULES = [
 const AGENTS = [
   {
     icon: FileSearch,
-    name: "Intake Agent",
-    body: "Watches new labs, vitals, and notes land on a patient's chart and keeps the record current in real time.",
+    name: "Retriever",
+    body: "Gathers the facts off the chart — labs, vitals, notes, home medications, prior admissions — and copies every value with the record it came from.",
   },
   {
     icon: ShieldAlert,
-    name: "Rules Agent",
-    body: "Runs fast rule-based checks the moment new data arrives, so urgent alerts never wait on a slower model.",
+    name: "Reconciler",
+    body: "Builds one timeline and surfaces contradictions: events out of order, a note that disagrees with the record, hours with no data at all.",
   },
   {
     icon: ActivitySquare,
-    name: "Risk Agent",
-    body: "Applies trained risk models to the current chart, kept separate from the rule-based alerts for a second, independent read.",
+    name: "Risk",
+    body: "Reports risk from two independent sources — rules with published thresholds, and models trained on 20,000 admissions — and shows both when they disagree.",
   },
   {
     icon: Gauge,
-    name: "Scoring Agent",
-    body: "Computes validated clinical scores — PERC, Wells, HEART, qSOFA, NEWS2, and more — and asks for exactly the missing input needed to complete each one.",
+    name: "Verifier",
+    body: "Waits for the other three, then checks every claim against the source data. Anything without a valid source id is rejected before it reaches you.",
   },
   {
     icon: BookOpenCheck,
-    name: "Brief Agent",
-    body: "Synthesizes every other agent's findings into one short, sourced brief a clinician can read in under 10 seconds.",
+    name: "Composer",
+    body: "Writes the final brief from the verified data, copying every value and source id exactly — one short, cited read in under 10 seconds.",
   },
 ];
 
