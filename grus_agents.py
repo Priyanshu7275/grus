@@ -371,12 +371,12 @@ RETRIEVAL_TOOLS = [
 
 def fast_model():
     return BedrockModel(model_id=FAST_MODEL, region_name=REGION,
-                        temperature=0.2, max_tokens=2500)
+                        temperature=0.2, max_tokens=8000)
 
 
 def reasoning_model():
     return BedrockModel(model_id=REASONING_MODEL, region_name=REGION,
-                        temperature=0.2, max_tokens=2000)
+                        temperature=0.2, max_tokens=6000)
 
 
 RETRIEVER_PROMPT = """You gather the facts for an emergency brief.
