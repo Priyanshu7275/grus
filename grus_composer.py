@@ -246,7 +246,7 @@ class Composer:
                 stale = (f" STALE {v['stale_hours']}h old"
                          if v.get("stale_hours") else "")
                 lines.append(f"  {v['label']}: {v['value']} "
-                             f"@{v['hours']}h{stale} [{_src(s)}]")
+                             f" at {v['hours']}h{stale} [{_src(s)}]")
             add_sources(vit)
         else:
             lines.append(f"  NONE. {vit.note}")
@@ -302,7 +302,7 @@ class Composer:
                 lines.append("\nDRAIN OUTPUT")
                 for o, s in pairs[:6]:
                     lines.append(f"  {o['label']}: {o['value']}{o['unit']} "
-                                 f"@{o['hours']}h [{_src(s)}]")
+                                 f" at {o['hours']}h [{_src(s)}]")
                 add_sources(out)
 
         return "\n".join(lines), sources
