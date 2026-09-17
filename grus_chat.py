@@ -53,10 +53,24 @@ WHAT YOU ARE
 Not a diagnostician. You report what the record contains, what the rules
 found, and what is missing. The clinician decides.
 
+THE ONE RULE THAT MATTERS MOST
+
+You must call a tool before stating any specific fact about this
+patient — a value, a date, a drug name, a result, a status. If you did
+not call a tool and see the answer in its result, you do not know it,
+and you say so.
+
+This failed once, in testing: asked for this patient's blood group, the
+model answered "O positive" with no tool call and nothing in the record
+supporting it. That must never happen again, for any fact — blood
+group, allergy, family history, prior surgery, discharge plan, anything.
+If retrieval finds nothing, the correct answer is that nothing was
+found. A confident wrong answer is worse than an honest "I don't know."
+
 HOW TO ANSWER
 
 Call tools. Never answer from memory or from what seems likely for a
-patient like this one. If you did not retrieve it, you do not know it.
+patient like this one.
 
 Start with get_active_alerts when the question is about risk — those
 alerts were produced by deterministic rules that recorded exactly what
@@ -69,6 +83,11 @@ not 'INR', 'Urea Nitrogen' not 'BUN'.
 For drug names, pass keywords to search_notes. Embeddings map drug names
 poorly — a passage naming vitamin K scored 0.185 on semantic search while
 a keyword match found it at once.
+
+If a fact is not the kind of thing any tool here retrieves — blood
+group is a real example, since it is rarely coded in this dataset — say
+plainly that it is not available from this record, rather than
+answering as if it might be found elsewhere in your training.
 
 CITATIONS
 
@@ -90,6 +109,9 @@ false, that is the answer — say what is missing and what to ask.
   Good: "No allergy record exists for this patient. That is not the same
          as no allergies — ask the patient before prescribing."
   Bad:  "No known drug allergies."
+
+  Good: "Blood group is not recorded in this patient's chart."
+  Bad:  "The patient's blood group is O positive."
 
 TONE
 
@@ -172,6 +194,45 @@ def _to_bedrock_tools():
 def _extract_sources(text):
     return sorted(set(re.findall(r"([a-z_]+#\d+)", text or "")))
 
+_ABSTENTION_MARKERS = re.compile(
+    r"\b(cannot determine|not (?:explicitly )?mention|not on file|"
+    r"no record|not available|not documented|unable to determine|"
+    r"does not contain|no information|not documented|I don't have)\b",
+    re.I)
+
+# A sentence that states something rather than hedging. Cheap heuristic:
+# it has a subject-verb-value shape and isn't already an abstention.
+# This isn't perfect NLP — it doesn't need to be. It only needs to catch
+# "the answer is X" shaped sentences with nothing behind them.
+_ASSERTION_SHAPE = re.compile(
+    r"\b(?:is|was|are|were|has|have|shows?|indicates?|confirms?)\b"
+    r".{0,60}?\b(?:[A-Z][a-z]+|\d)", re.I)
+
+
+def _has_unsupported_claim(text, valid_sources, tools_returned_data):
+    """
+    Not a list of forbidden facts — a general check on whether ANYTHING
+    was actually retrieved to support what was said.
+
+    Chat has no deterministic Verifier the way the brief does. This is
+    the substitute: if the response asserts something (rather than
+    hedging) and this turn cited zero real sources and called zero tools
+    that found data, there is nothing underneath the sentence. That
+    covers blood group, allergies, family history, prognosis — anything
+    — without needing a pattern for each one.
+
+    False positives are acceptable here; a doctor mildly annoyed by an
+    unnecessary abstention is a far smaller cost than one who trusts an
+    invented fact.
+    """
+    if _ABSTENTION_MARKERS.search(text):
+        return False
+    if valid_sources or tools_returned_data:
+        return False
+    # Nothing was retrieved. If the model still asserted something
+    # rather than declining, that assertion has no basis.
+    return bool(_ASSERTION_SHAPE.search(text))    
+
 
 def answer(conn, hadm_id: int, message: str,
            as_of_hours: Optional[float] = None,
@@ -249,6 +310,17 @@ def answer(conn, hadm_id: int, message: str,
             text = re.sub(r"\[\s*[,\s]*\]", "", text)
             text = re.sub(r"\[(no source|unknown|n/?a)\]", "", text,
                           flags=re.I)
+
+            # Mechanical check, same philosophy as the brief's Verifier:
+            # a stated clinical value with nothing behind it does not
+            # reach the doctor. This caught a real case in testing — a
+            # blood group was stated with zero tool calls this turn.
+            tools_returned_data = any(c["found"] for c in calls)
+            if _has_unsupported_claim(text, valid, tools_returned_data):
+                text = ("I don't have a reliable source for that in this "
+                        "patient's record. Ask the patient or family, or "
+                        "check for external lab results.")
+                valid = []
 
             abstained = [
                 {"claim": c["tool"], "reason": "no data on file"}
