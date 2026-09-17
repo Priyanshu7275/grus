@@ -202,7 +202,7 @@ def list_patients(
     search: Optional[str] = None,
     risk: Optional[str] = Query(None, pattern="^(critical|high|moderate|low|unknown)$"),
     limit: int = Query(300, le=500),
-    conn=Depends(get_conn),
+    conn=Depends(get_conn_tuple),
 ):
     """
     The cohort board.
