@@ -45,10 +45,7 @@ REASONING_MODEL = AWS.REASONING_PREFERRED
 
 
 
-# ---------------------------------------------------------------
-# Session — the tools need a patient and a time cutoff, but Strands
-# tools are plain functions. This holds the current context.
-# ---------------------------------------------------------------
+
 class Session:
     conn = None
     tools = None
@@ -75,20 +72,7 @@ def _result(r):
 
 
 def _repair(raw):
-    """
-    Recover arguments from malformed tool-call JSON.
-
-    Qwen sometimes emits the object without its opening brace:
-
-        question": "why anticoagulated", "keywords": ["warfarin"]}
-
-    Strands catches the parse error, defaults to an empty dict, and the
-    tool runs with no arguments at all — search_notes searching for
-    nothing, silently. The call appears to succeed and returns nothing
-    useful, which is worse than failing.
-
-    Returns a dict, or None when nothing can be salvaged.
-    """
+    
     if isinstance(raw, dict):
         return raw
     if not isinstance(raw, str) or not raw.strip():
@@ -120,8 +104,7 @@ def _repair(raw):
 
 @tool
 def get_patient_summary() -> str:
-    """Age, sex, admission type, and how many prior admissions exist.
-    Cheap orienting call — use first."""
+
     return _result(Session.tools.get_patient_summary())
 
 
@@ -143,14 +126,7 @@ def list_available_labs() -> str:
 
 @tool
 def get_lab(label: str = None, mode: str = "trend") -> str:
-    """Any lab result by exact label.
-
-    Args:
-        label: exact MIMIC label, e.g. 'INR(PT)'
-        mode: trend | latest | first | nadir | peak.
-              'first' is the arrival value; 'nadir' the lowest, which is
-              what matters for bleeding risk.
-    """
+    
     if not label:
         # A tool called with no arguments must say so. Returning an empty
         # result would look like 'no such lab exists', which is a
@@ -197,15 +173,7 @@ def get_current_vitals() -> str:
 @tool
 def get_medications(drug_class: str = None, drug_name: str = None,
                     status: str = None) -> str:
-    """Medications this admission.
-
-    Args:
-        drug_class: anticoagulant, antiplatelet, nsaid, opioid,
-                    reversal_agent, beta_blocker, antibiotic,
-                    vasopressor, insulin, diuretic
-        drug_name: partial name match
-        status: active | stopped | unknown
-    """
+    
     return _result(Session.tools.get_medications(drug_class, drug_name, status))
 
 
@@ -226,9 +194,7 @@ def get_diagnoses() -> str:
 
 @tool
 def get_recurring_diagnoses(min_visits: int = 2) -> str:
-    """Conditions appearing across several prior admissions. 'Fifth
-    presentation with heart failure' is a pattern nobody looks up by
-    hand."""
+    
     return _result(Session.tools.get_recurring_diagnoses(min_visits))
 
 
@@ -248,13 +214,7 @@ def get_outputs(label: str = None) -> str:
 @tool
 def search_notes(question: str = None, keywords: list = None,
                  k: int = 5) -> str:
-    """Search the clinical notes semantically, plus exact matching when
-    keywords are given.
-
-    Use keywords for drug names. General-purpose embeddings map those
-    poorly: a passage naming vitamin K scored 0.185 on semantic search
-    while a keyword match found it immediately.
-    """
+    
     if not question and not keywords:
         # Searching for nothing returns nothing, which reads as 'the
         # notes contain nothing relevant' — a claim the tool has not
@@ -292,18 +252,7 @@ def get_source_data() -> str:
 
 @tool
 def get_risk_scores() -> str:
-    """Predicted risk from the trained models: transfusion likely within
-    12h, acute kidney injury within 24h, electrolyte crisis within 12h.
-
-    Returns a probability per model, whether it crosses that model's
-    threshold, and how much of the feature vector was available. A score
-    built from a quarter of the features is not the same claim as one
-    built from most of them, and the tool says so.
-
-    Returns available=false when there is too little data to score. That
-    is not a low-risk result — say so rather than treating it as
-    reassurance.
-    """
+    
     from grus_risk_score import score
     return json.dumps(score(Session.conn, Session.hadm_id, Session.as_of),
                       default=str)
@@ -538,18 +487,7 @@ def build_agents():
 
 
 def build_graph():
-    """
-    Three parallel gatherers, then verification, then writing.
-
-    Parallel matters: retrieval, reconciliation and risk do not depend on
-    each other, so running them in sequence means waiting three times
-    instead of once.
-
-    The limits are not decoration. An agent that keeps calling tools
-    without converging would otherwise run until the request times out,
-    and in a clinical setting a brief that never arrives is worse than a
-    short one.
-    """
+    
     retriever, reconciler, risk, verifier, composer = build_agents()
 
     b = GraphBuilder()
@@ -583,15 +521,7 @@ def build_graph():
 
 
 def check_citations(text):
-    """
-    A deterministic pass over the finished brief.
-
-    The Verifier agent is an LLM judging other LLMs, which is useful but
-    not a guarantee. This is arithmetic: pull every bracketed tag out of
-    the text and check it against the ids the tools actually returned.
-
-    Returns (valid, invalid, coverage_pct).
-    """
+    
     import re
     tags = re.findall(r"\[([^\]]+)\]", text)
     valid, invalid = [], []
