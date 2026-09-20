@@ -6,18 +6,9 @@ FastAPI over the agent graph, the rule engine, and Aurora.
 Everything the frontend needs, shaped to the contract already sent to the
 frontend developer. Run it and the OpenAPI docs are at /docs.
 
-    uvicorn grus_api:app --reload --port 8000
+    
 
-Design notes worth knowing before reading further:
 
-  as_of_hours is honoured on every patient endpoint. Omit it and you get
-  the full record; pass 1 and you get the record as it stood one hour
-  after arrival. This is what stops the system reading the answer key.
-
-  Briefs are generated live, not precomputed. A real patient arrives
-  without a cached anything, and a demo that pretends otherwise is
-  demonstrating the wrong thing. Results are cached after the first call
-  so dragging the timeline slider is not thirty model invocations.
 
   Registering a patient triggers the whole pipeline — ETL, chunking,
   embedding, rules, brief — in the background. The response returns
@@ -79,14 +70,7 @@ def get_conn():
         conn.close()
 
 def get_conn_tuple():
-    """
-    Same connection, but tuple rows.
-
-    grus_rules.py and grus_score_engine.py index results positionally
-    (row[0], row[1]) rather than by column name. Any endpoint that calls
-    evaluate() or ScoreEngine must use this, not get_conn — a dict-row
-    connection makes positional indexing raise KeyError.
-    """
+    
     conn = psycopg.connect(
         host=HOST, port=5432, dbname="grus", user="grusadmin",
         password=PWD, sslmode="require",
@@ -204,15 +188,7 @@ def list_patients(
     limit: int = Query(300, le=500),
     conn=Depends(get_conn_tuple),
 ):
-    """
-    The cohort board.
-
-    Risk level is read from the admissions.risk_level column, computed
-    once and stored — not recalculated per request. Computing it live for
-    300 patients on every page load took minutes; reading a column is
-    instant. The column is refreshed by a script when a patient's rules
-    need re-evaluating, not on every board view.
-    """
+    
     where, params = ["a.is_current = TRUE"], []
     if cohort:
         where.append("a.cohort = %s")
@@ -403,14 +379,7 @@ def list_patient_scores(hadm_id: int, presentation: Optional[str] = None,
 def get_patient_score(hadm_id: int, score_name: str,
                       as_of_hours: Optional[float] = None,
                       conn=Depends(get_conn_tuple)):
-    """
-    Compute one score. The record fills what it can.
-
-    Criteria the record cannot supply come back under
-    components.missing, each with the question to ask. When anything is
-    missing there is no total — render the questions, not a partial
-    number.
-    """
+    
     from grus_score_engine import ScoreEngine
     eng = ScoreEngine(conn, hadm_id, as_of_hours)
     r = eng.compute(score_name)
@@ -444,16 +413,7 @@ def compute_patient_score(hadm_id: int, score_name: str,
 @app.get("/patients/{hadm_id}/risk", tags=["patients"])
 def get_risk(hadm_id: int, as_of_hours: Optional[float] = None,
              conn=Depends(get_conn_tuple)):
-    """
-    Model predictions from the SageMaker endpoints.
-
-    Separate from /alerts on purpose. Rules fire on thresholds; models
-    weigh everything together. Showing them apart lets a clinician see
-    when they disagree, which is the interesting case.
-
-    Returns available=false when there is too little data to score.
-    Render that as unknown, not as low risk.
-    """
+    
     try:
         from grus_risk_score import score
         return score(conn, hadm_id, as_of_hours)
