@@ -4,23 +4,8 @@ GRUS — AgentCore deployment
 Builds the container, pushes it to ECR, and creates the AgentCore
 runtime.
 
-    python grus_agentcore_deploy.py role      IAM role for the runtime
-    python grus_agentcore_deploy.py ecr       create the repository
-    python grus_agentcore_deploy.py build     build and push the image
-    python grus_agentcore_deploy.py create    create the runtime
-    python grus_agentcore_deploy.py invoke    test it
-    python grus_agentcore_deploy.py status
-    python grus_agentcore_deploy.py delete
 
-Two things that catch people out:
 
-  AgentCore runs ARM64. An image built on an x86 laptop without
-  --platform linux/arm64 will push happily and fail at runtime with an
-  exec format error.
-
-  The runtime needs VPC access to reach Aurora, which means the same
-  subnets and security group the database sits in. Those are read from
-  the cluster rather than hardcoded.
 """
 
 import os
