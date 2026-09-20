@@ -4,16 +4,7 @@ GRUS — Risk scoring
 Builds features for a patient at a point in time and calls the SageMaker
 endpoints for a prediction.
 
-Two things this file is careful about.
 
-The features must be built exactly as they were during training. Same
-columns, same order, same forward-fill, same delta windows. A mismatch
-does not error — it silently returns a plausible wrong number, which is
-the worst failure mode available.
-
-The as_of cutoff applies here too. Scoring hour 12 must not see hour 13.
-Without that the model reads the answer key and every prediction looks
-brilliant and means nothing.
 """
 
 import os
