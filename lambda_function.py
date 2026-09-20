@@ -4,23 +4,14 @@ GRUS — Scenario replay Lambda
 Reads a scenario file from S3 and writes one hour of observations into
 Aurora each time it runs. EventBridge invokes it on a schedule.
 
-Paste this whole file into the Lambda console editor. It uses pg8000
-rather than psycopg because pg8000 is pure Python — no compiled binaries,
-so no layer and no Docker build. Slightly slower, which does not matter
-for one insert a minute.
+
 
 The scenario file is plain text you edit in the S3 console. Overwrite it
 and the next tick restarts from hour 0 with the new numbers.
 
 Environment variables to set on the function:
 
-    DB_HOST          grus-db.cluster-xxxx.ap-south-1.rds.amazonaws.com
-    DB_NAME          grus
-    DB_USER          grusadmin
-    DB_SECRET_ARN    arn:aws:secretsmanager:...:secret:grus/db-password-xxxxx
-    SCENARIO_BUCKET  grus-mimic-data-etl
-    SCENARIO_KEY     scenarios/active.txt
-    STATE_KEY        scenarios/state.json
+
 
 Timeout 60s. VPC: the same subnets and security group as Aurora.
 """
