@@ -33,16 +33,7 @@ from sklearn.isotonic import IsotonicRegression
 from grus_config import Paths
 MODEL_DIR = str(Paths.MODEL_DIR)
 
-# Every label the feature builder computed, including the ones it later
-# dropped for being too rare. All of them must be excluded from the
-# feature set.
-#
-# This bit us: bleeding_progression_6h was dropped as a LABEL but stayed
-# in the feature list, and became the top feature for
-# needs_transfusion_12h with three times the weight of anything else. It
-# is computed from data 1-6 hours in the FUTURE, so the model was reading
-# the answer key. The correlation check missed it because the leak sat
-# below 0.8.
+
 ALL_LABEL_COLS = [
     "needs_transfusion_12h", "bleeding_progression_6h", "aki_risk_24h",
     "neuro_decline_6h", "sepsis_progression_12h",
@@ -60,12 +51,10 @@ MIN_AUC = 0.65
 MAX_CALIBRATION_ERROR = 0.10
 MAX_SUBGROUP_AUC_GAP = 0.10
 
-# A model that fires on more than a third of hours is background noise,
-# not an alert. Clinicians stop reading.
+
 MAX_ALERT_RATE = 0.35
 
-# When one feature carries more than 40% of a model, it is usually
-# restating that value rather than predicting a change.
+
 MAX_SINGLE_FEATURE_GAIN = 0.40
 
 
@@ -252,8 +241,7 @@ def choose_threshold(y, p, label):
         idx = int(np.nanargmax(f1))
         desc = "F1 optimum"
 
-    # What the operating point would look like at other cutoffs. Useful
-    # on screen: a clinician can see the trade rather than trust a number.
+   
     curve = []
     for target in [0.50, 0.60, 0.70, 0.80, 0.90]:
         ok = rec >= target
@@ -353,26 +341,18 @@ def gates(metrics, fair, feats):
         failures.append(f"subgroup AUC gap {fair['max_gap']:.3f} "
                         f"above {MAX_SUBGROUP_AUC_GAP}")
 
-    # A model firing on most hours is not a signal, whatever its AUC.
-    # Respiratory decline alerted on 57% of hours at precision 0.48 —
-    # a coin flip, constantly.
+    
     if metrics["alert_rate"] > MAX_ALERT_RATE:
         failures.append(f"alerts on {metrics['alert_rate']:.0%} of hours, "
                         f"above {MAX_ALERT_RATE:.0%}")
 
-    # Precision below this asks a clinician to act on a coin flip. A
-    # recall floor set too high produces exactly this: the first attempt
-    # at 70% recall for transfusion gave precision 0.20 — four alerts
-    # wrong in every five.
+    
     if metrics["precision"] < MIN_PRECISION:
         failures.append(f"precision {metrics['precision']:.2f} below "
                         f"{MIN_PRECISION} — the recall floor is too high "
                         f"for this model")
 
-    # One feature carrying most of the model usually means it is
-    # restating a value rather than predicting a change. A sepsis model
-    # whose top feature is the current white cell count is largely saying
-    # 'high WBC now means high WBC soon' — true, and useless.
+    
     if feats and feats[0]["gain"] > MAX_SINGLE_FEATURE_GAIN:
         failures.append(f"'{feats[0]['feature']}' carries "
                         f"{feats[0]['gain']:.0%} of the model — likely "
@@ -466,9 +446,7 @@ def run():
     with open(f"{MODEL_DIR}/models/shipped.txt", "w") as f:
         f.write("\n".join(passed))
 
-    # Thresholds travel with the models. Serving must use the same
-    # operating point the evaluation reported, or the precision and
-    # recall a clinician was told about are not the ones they get.
+
     with open(f"{MODEL_DIR}/models/thresholds.json", "w") as f:
         json.dump({lbl: {
             "threshold": report[lbl]["metrics"]["threshold"],
