@@ -60,7 +60,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
+from grus_mcp import attach_mcp
+attach_mcp(app)
 # ---------------------------------------------------------------
 # Database
 # ---------------------------------------------------------------
@@ -202,15 +203,18 @@ def list_patients(
     search: Optional[str] = None,
     risk: Optional[str] = Query(None, pattern="^(critical|high|moderate|low|unknown)$"),
     limit: int = Query(300, le=500),
-    conn=Depends(get_conn),
+    conn=Depends(get_conn_tuple),
 ):
     """
     The cohort board.
 
-    Risk level here comes from the rule engine's worst active alert, not
-    from a model. It is cheap to compute and does not require generating
-    a brief for all 300 patients on page load.
+    Risk level is read from the admissions.risk_level column, computed
+    once and stored — not recalculated per request. Alert and unknown
+    counts are counted from alert_traces, which the rule engine writes
+    when it runs with persist=True. Both are instant reads.
     """
+    from grus_rules import RULE_VERSION                       # NEW
+
     where, params = ["a.is_current = TRUE"], []
     if cohort:
         where.append("a.cohort = %s")
@@ -219,6 +223,9 @@ def list_patients(
         where.append("(CAST(a.hadm_id AS TEXT) LIKE %s "
                      "OR CAST(a.subject_id AS TEXT) LIKE %s)")
         params += [f"%{search}%", f"%{search}%"]
+    if risk:
+        where.append("a.risk_level = %s")
+        params.append(risk)
     params.append(limit)
 
     rows = conn.execute(f"""
@@ -235,52 +242,50 @@ def list_patients(
                   FROM (SELECT long_title FROM diagnoses
                          WHERE hadm_id = a.hadm_id AND long_title IS NOT NULL
                          ORDER BY seq_num NULLS LAST LIMIT 2) d)
-                 AS top_dx
+                 AS top_dx,
+               a.risk_level,
+               (SELECT COUNT(*) FROM alert_traces t                   -- NEW
+                 WHERE t.hadm_id = a.hadm_id
+                   AND t.rule_version = %s
+                   AND t.dismissed_at IS NULL
+                   AND t.severity IN ('critical', 'warning'))
+                 AS alert_count,
+               (SELECT COUNT(*) FROM alert_traces t                   -- NEW
+                 WHERE t.hadm_id = a.hadm_id
+                   AND t.rule_version = %s
+                   AND t.dismissed_at IS NULL
+                   AND t.severity = 'unknown')
+                 AS unknown_count
         FROM admissions a
         JOIN patients p ON p.subject_id = a.subject_id
         WHERE {' AND '.join(where)}
         ORDER BY a.hadm_id
         LIMIT %s
-    """, params).fetchall()
-
-    from grus_rules import evaluate
-    SEV_RANK = {"critical": 0, "warning": 1, "unknown": 2, "info": 3}
-    LEVEL = {"critical": "critical", "warning": "high",
-             "info": "low", "unknown": "unknown"}
+    """, [RULE_VERSION, RULE_VERSION] + params).fetchall()     # NEW: version first
 
     out = []
     for r in rows:
-        try:
-            alerts = evaluate(conn, r["hadm_id"], None, persist=False)
-        except Exception:
-            alerts = []
+        hadm_id, subject_id, cohort_, arrival_unit, admission_type, \
+            hosp_days, hospital_expire_flag, anchor_age, gender, \
+            prior_admissions, stay_id, top_dx, risk_level, \
+            alert_count, unknown_count = r                         # NEW
 
-        worst = min((a.severity for a in alerts),
-                    key=lambda s: SEV_RANK.get(s, 9), default="unknown")
-        level = LEVEL.get(worst, "unknown")
-        if risk and level != risk:
-            continue
-
-        age, sex = r["anchor_age"], r["gender"]
-        dx = (r["top_dx"] or "").split(";")[0].strip()
-        crit = alerts[0].title if alerts else "no alerts"
+        dx = (top_dx or "").split(";")[0].strip()
 
         out.append(PatientCard(
-            hadm_id=r["hadm_id"], subject_id=r["subject_id"],
-            stay_id=r["stay_id"], age=age, gender=sex,
-            cohort=r["cohort"], arrival_unit=r["arrival_unit"],
-            admission_type=r["admission_type"],
-            hours_since_arrival=_num(r["hosp_days"]) * 24
-                if r["hosp_days"] else None,
-            risk_level=level,
-            alert_count=sum(1 for a in alerts
-                            if a.severity in ("critical", "warning")),
-            unknown_count=sum(1 for a in alerts if a.severity == "unknown"),
-            headline=f"{age}{sex}, {dx}. {crit}"[:140],
-            prior_admissions=r["prior_admissions"],
+            hadm_id=hadm_id, subject_id=subject_id,
+            stay_id=stay_id, age=anchor_age, gender=gender,
+            cohort=cohort_, arrival_unit=arrival_unit,
+            admission_type=admission_type,
+            hours_since_arrival=_num(hosp_days) * 24 if hosp_days else None,
+            risk_level=risk_level or "unknown",
+            alert_count=alert_count or 0,                          # NEW
+            unknown_count=unknown_count or 0,                      # NEW
+            headline=f"{anchor_age}{gender}, {dx}"[:140],
+            prior_admissions=prior_admissions,
         ))
 
-    return {"count": len(out), "patients": [p.model_dump() for p in out]}
+    return {"count": len(out), "patients": out}
 
 
 # ---------------------------------------------------------------

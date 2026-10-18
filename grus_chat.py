@@ -22,8 +22,11 @@ import os
 import re
 import json
 import time
+from grus_valuecheck import index_result, check_values
 from typing import List, Dict, Optional
-
+from grus_spoken import lookup, to_speech
+from grus_valuecheck import ONE_TAG
+from grus_spoken import lookup, to_speech, SPOKEN_INSTRUCTION, split_spoken, choose_speech
 import boto3
 from grus_config import DB, AWS
 from sqlalchemy import tuple_
@@ -270,12 +273,13 @@ def answer(conn, hadm_id: int, message: str,
 
     model = model_id or CHAT_MODEL
     calls, sources_seen = [], []
+    values_by_source = {}
 
     for _ in range(MAX_TOOL_ROUNDS):
         try:
             r = bedrock.converse(
                 modelId=model,
-                system=[{"text": SYSTEM}],
+                system=[{"text": SYSTEM + SPOKEN_INSTRUCTION}],
                 messages=messages,
                 toolConfig=_to_bedrock_tools(),
                 inferenceConfig={"maxTokens": 1500, "temperature": 0.2},
@@ -298,7 +302,8 @@ def answer(conn, hadm_id: int, message: str,
             text = "".join(b.get("text", "") for b in blocks).strip()
             text = re.sub(r"<think>.*?</think>", "", text,
                           flags=re.DOTALL).strip()
-
+            text, spoken_draft = split_spoken(text)
+            text, value_rejected = check_values(text, values_by_source)
             cited = _extract_sources(text)
             valid = [c for c in cited if c in sources_seen]
             invented = [c for c in cited if c not in sources_seen]
@@ -321,21 +326,37 @@ def answer(conn, hadm_id: int, message: str,
                         "patient's record. Ask the patient or family, or "
                         "check for external lab results.")
                 valid = []
+                spoken_draft = None
 
             abstained = [
                 {"claim": c["tool"], "reason": "no data on file"}
                 for c in calls if not c["found"]]
 
+            # Spoken version is built LAST, from the final checked text,
+            # so Alexa never says anything the screen doesn't.
+            try:
+                rule_speech = to_speech(text, lookup(conn, hadm_id,
+                                        set(ONE_TAG.findall(text)), as_of_hours))
+            except Exception:
+                rule_speech = re.sub(r"\[?[a-z_]+#\d+\]?", "", text).strip()
+            speech, speech_source, speech_reason = choose_speech(
+                spoken_draft, text, rule_speech)
+   
             return {
                 "answer": text,
                 "sources": valid,
                 "abstained": abstained,
-                "tools_called": calls,
+                "tools_called": calls,""
+                "speech": speech,
+                "speech_source": speech_source,          # "model" or "rules"
                 "retrieval": {
                     "tool_calls": len(calls),
                     "sources_available": len(sources_seen),
                     "sources_cited": len(valid),
                     "citations_removed": len(invented),
+                    "values_rejected": value_rejected,
+                    "speech_fallback_reason": speech_reason,
+                    
                 },
                 "model": model,
                 "trace_id": trace_id,
@@ -347,6 +368,7 @@ def answer(conn, hadm_id: int, message: str,
         results = []
         for tu in tool_uses:
             res = dispatch(tools, tu["name"], tu.get("input") or {})
+            index_result(values_by_source, res)
             calls.append({"tool": tu["name"], "args": tu.get("input") or {},
                           "found": res.found})
             for s in res.sources:
