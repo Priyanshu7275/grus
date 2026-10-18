@@ -52,14 +52,7 @@ def connect():
     return con
 
 
-# ---------------------------------------------------------------
-# Labs on an hourly grid
-#
-# Labs are drawn irregularly — a creatinine at 3h, the next at 27h. The
-# model needs a value at every hour, so each lab is carried forward from
-# its last result. Carrying forward is safe; interpolating between a
-# past and a FUTURE value would leak.
-# ---------------------------------------------------------------
+
 def build_hourly_labs(con):
     lab_list = ",".join(f"'{l}'" for l in LAB_SET)
 
@@ -126,12 +119,7 @@ def build_grid(con, max_hours=168):
     print(f"  grid: {n:,} patient-hours across {s:,} stays")
 
 
-# ---------------------------------------------------------------
-# FEATURES — data at or before hour T
-#
-# Every window here looks BACKWARD. A 6-hour delta compares hour T with
-# hour T-6, never T+6.
-# ---------------------------------------------------------------
+
 def build_features(con):
     vital_cols = ",\n".join(f"           v.{c}" for c in VITAL_SET)
 
@@ -192,12 +180,7 @@ def build_features(con):
     print(f"  features: {n:,} rows")
 
 
-# ---------------------------------------------------------------
-# LABELS — data strictly AFTER hour T
-#
-# Each is a decision a clinician makes in the next few hours, not an
-# outcome they cannot influence.
-# ---------------------------------------------------------------
+
 def build_labels(con):
     con.execute("""
         CREATE OR REPLACE TABLE labels AS
