@@ -82,9 +82,30 @@ def _title(code):
     return t[:1].upper() + t[1:]
 
 
+_ACRONYMS = {"INR", "NSAID", "NSAIDS", "AKI", "BP", "SBP", "DBP", "HR", "PE",
+             "ICU", "ECG", "CKD", "GI", "DVT", "KDIGO", "SIRS", "SOFA",
+             "GCS", "SPO2", "MAP"}
+_SEVERITY_TITLE = re.compile(
+    r"(\[(?:critical|warning|info|unknown)\]\s*)([A-Z][A-Z0-9 .,/%()+-]{3,}?)"
+    r"(?=\s*(?::|$))", re.M)
+
+
+def _sentence_case(title):
+    """'RENAL IMPAIRMENT - CREATININE 2.7' -> 'Renal impairment, creatinine 2.7'"""
+    t = re.sub(r"\s+[—-]\s+", ", ", title.strip())
+    words = [w if w.strip(",.()").upper() in _ACRONYMS else w.lower()
+             for w in t.split()]
+    t = " ".join(words)
+    return t[:1].upper() + t[1:]
+
+
 def tidy_brief(text):
     if not text:
         return text
+
+    # 0. Shouted alert titles after a severity tag -> sentence case.
+    text = _SEVERITY_TITLE.sub(
+        lambda m: m.group(1) + _sentence_case(m.group(2)), text)
 
     # 1. Rule codes at the start of a line -> plain titles.
     def code(m):

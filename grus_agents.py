@@ -542,6 +542,10 @@ def check_citations(text):
     for block in tags:
         block = block.strip()
 
+        # Severity labels ("[critical] ...") are layout, not citations.
+        if block.lower() in ("critical", "warning", "info", "unknown"):
+            continue
+
         # A bracket with no '#' is not an attempt at a citation at all —
         # "[no source]", "[unknown]". Count it once, not once per word.
         if "#" not in block:
