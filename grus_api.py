@@ -69,7 +69,7 @@ def get_conn():
     conn = psycopg.connect(
         host=HOST, port=5432, dbname="grus", user="grusadmin",
         password=PWD, sslmode="require",
-        keepalives=1, keepalives_idle=30, connect_timeout=15,
+        keepalives=1, keepalives_idle=30, connect_timeout=40,
         row_factory=dict_row,
     )
     conn.execute("SET search_path TO grus, public")
@@ -91,7 +91,7 @@ def get_conn_tuple():
     conn = psycopg.connect(
         host=HOST, port=5432, dbname="grus", user="grusadmin",
         password=PWD, sslmode="require",
-        keepalives=1, keepalives_idle=30, connect_timeout=15,
+        keepalives=1, keepalives_idle=30, connect_timeout=40,
         row_factory=tuple_row,
     )
     conn.execute("SET search_path TO grus, public")
