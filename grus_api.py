@@ -103,6 +103,23 @@ def get_conn_tuple():
     finally:
         conn.close()
 
+def short_ids(conn, ids=None):
+    """
+    hadm_id -> the fewest trailing digits (at least 4) that name it and no
+    other current patient. Same rule as grus_mcp._short_id.
+    """
+    current = [str(r[0]) for r in conn.execute(
+        "SELECT hadm_id FROM admissions WHERE is_current = TRUE").fetchall()]
+    out = {}
+    for s in (current if ids is None else [str(i) for i in ids]):
+        for n in range(4, len(s) + 1):
+            tail = s[-n:]
+            if not any(o != s and o.endswith(tail) for o in current):
+                break
+        out[int(s)] = tail
+    return out
+
+
 def _num(v):
     """Decimal and NUMERIC come back as Decimal; JSON cannot hold them."""
     if v is None:
@@ -129,6 +146,10 @@ class PatientCard(BaseModel):
     unknown_count: int = 0
     headline: str = ""
     prior_admissions: int = 0
+    # What a clinician reads and says aloud: the last 4 digits of hadm_id,
+    # or more if another current patient shares them. Alexa uses the same
+    # rule ("patient ending 5843"), so screen and voice always agree.
+    short_id: Optional[str] = None
 
 
 class NewAdmission(BaseModel):
@@ -265,6 +286,7 @@ def list_patients(
         LIMIT %s
     """, [RULE_VERSION, RULE_VERSION] + params).fetchall()     # NEW: version first
 
+    sids = short_ids(conn)
     out = []
     for r in rows:
         hadm_id, subject_id, cohort_, arrival_unit, admission_type, \
@@ -285,9 +307,17 @@ def list_patients(
             unknown_count=unknown_count or 0,                      # NEW
             headline=f"{anchor_age}{gender}, {dx}"[:140],
             prior_admissions=prior_admissions,
+            short_id=sids.get(hadm_id, str(hadm_id)[-4:]),
         ))
 
     return {"count": len(out), "patients": out}
+
+
+@app.get("/patients/{hadm_id}/short-id", tags=["patients"])
+def get_short_id(hadm_id: int, conn=Depends(get_conn_tuple)):
+    """The id a clinician sees and says: 'patient 5843'."""
+    return {"hadm_id": hadm_id,
+            "short_id": short_ids(conn, [hadm_id]).get(hadm_id)}
 
 
 # ---------------------------------------------------------------

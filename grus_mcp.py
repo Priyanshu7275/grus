@@ -42,6 +42,7 @@ import hmac
 import json
 import os
 import re
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -70,8 +71,8 @@ Rules:
 2. Read the `text` of each result exactly as written. It is already
    checked against the record. Do not add, round, or change any number,
    and never state a clinical value no tool returned.
-3. Any clinical question about the patient goes to ask_record, even if
-   another tool seems close.
+3. A single lab value -> lab_value. Current vitals -> current_vitals.
+   Alerts -> get_alerts. Any other clinical question -> ask_record.
 4. "Log ...", "note ...", "record ..." -> log_event.
    "Ask the desk / get / send for ..." -> send_request.
    "Remind me ..." -> set_reminder.
@@ -243,6 +244,13 @@ def t_triage_board(conn, a, actor):
 def t_ask_record(conn, a, actor):
     hadm_id = resolve_patient(conn, a.get("patient"))
     question = (a.get("question") or "").strip()
+    # The patient is already resolved. Drop "for patient ending 5843" from
+    # the question so the model doesn't echo the id back as if it were a
+    # value of the record.
+    question = re.sub(
+        r"\s*\b(?:for|of|on|about)?\s*(?:the\s+)?patient\s+"
+        r"(?:ending\s+(?:in\s+)?|number\s+|#\s*)?\d{3,}\b", "", question,
+        flags=re.I).strip(" ,") or question
     if not question:
         raise ToolError("What would you like to know?")
     sid = _open_session(conn, hadm_id)
@@ -326,6 +334,126 @@ def t_calculate_score(conn, a, actor):
                    else ""))
     return _result(_prefix(conn, hadm_id) + speak_units(text),
                    {"hadm_id": hadm_id, "score": d})
+
+
+# ------------------------------------------------ fast voice tools
+# The commonest bedside questions ("what's the INR", "current vitals")
+# answered straight from the database, in code, in well under a second.
+# No model writes the number, so there is nothing for a check to catch.
+
+_LAB_ALIASES = {
+    "inr": "INR(PT)", "pt": "PT", "ptt": "PTT",
+    "hb": "Hemoglobin", "hgb": "Hemoglobin", "haemoglobin": "Hemoglobin",
+    "hemoglobin": "Hemoglobin", "potassium": "Potassium", "k": "Potassium",
+    "sodium": "Sodium", "na": "Sodium", "creatinine": "Creatinine",
+    "platelets": "Platelet Count", "platelet": "Platelet Count",
+    "plt": "Platelet Count", "lactate": "Lactate", "glucose": "Glucose",
+    "wbc": "White Blood Cells", "white cells": "White Blood Cells",
+    "white blood cells": "White Blood Cells", "bun": "Urea Nitrogen",
+    "urea": "Urea Nitrogen", "bicarbonate": "Bicarbonate",
+    "magnesium": "Magnesium", "troponin": "Troponin T",
+    "chloride": "Chloride", "calcium": "Calcium, Total",
+}
+_LAB_SPOKEN = {"INR(PT)": "INR", "Platelet Count": "platelets",
+               "White Blood Cells": "white cell count",
+               "Urea Nitrogen": "urea", "Calcium, Total": "calcium"}
+_WHICH = {"arrival": "first", "first": "first", "latest": "latest",
+          "last": "latest", "current": "latest", "lowest": "nadir",
+          "highest": "peak", "peak": "peak", "nadir": "nadir"}
+_WHICH_WORD = {"first": "on arrival", "latest": "most recent",
+               "nadir": "lowest", "peak": "highest"}
+
+
+def t_lab_value(conn, a, actor):
+    hadm_id = resolve_patient(conn, a.get("patient"))
+    asked = (a.get("lab") or "").strip()
+    if not asked:
+        raise ToolError("Which lab?")
+    label = _LAB_ALIASES.get(asked.lower(), asked)
+    mode = _WHICH.get((a.get("which") or "latest").lower(), "latest")
+    from grus_tools import GrusTools
+    res = GrusTools(conn, hadm_id).get_lab(label, mode)
+    if not res.found or not res.rows:
+        return _result(_prefix(conn, hadm_id) +
+                       f"no {asked} result on file for this admission.",
+                       {"hadm_id": hadm_id, "found": False})
+    row, src = res.rows[0], res.sources[0]
+    from grus_spoken import when, speak_units
+    name = _LAB_SPOKEN.get(label, label.split("(")[0].strip().lower())
+    unit = speak_units(f" {row.get('unit')}") if row.get("unit") else ""
+    w = when(row.get("hours_since_admit"))
+    word = _WHICH_WORD[mode]
+    if mode == "first":
+        lead = f"{name} on arrival was"
+    else:
+        lead = f"{word} {name} was"
+    text = f"{lead} {row['value']}{unit.rstrip()}"
+    h = row.get("hours_since_admit")
+    # "INR on arrival ... 2 hours into the admission" sounds contradictory;
+    # arrival bloods are drawn over the first few hours.
+    if w and not (mode == "first" and h is not None and float(h) <= 6):
+        text += f", {w}"
+    if row.get("abnormal"):
+        text += ", flagged abnormal"
+    text = text[:1].upper() + text[1:] + "."
+    return _result(_prefix(conn, hadm_id) + re.sub(r"\s{2,}", " ", text), {
+        "hadm_id": hadm_id, "lab": label, "which": mode, "value": row["value"],
+        "unit": row.get("unit"), "source": f"{src['table']}#{src['id']}"})
+
+
+def _vital_phrase(label, value):
+    l = label.lower()
+    if "heart rate" in l:
+        return "heart rate", f"heart rate {value}"
+    if "systolic" in l:
+        return "sbp", value
+    if "diastolic" in l:
+        return "dbp", value
+    if "o2 saturation" in l or "spo2" in l:
+        return "spo2", f"oxygen saturation {value} percent"
+    if "respiratory rate" in l:
+        return "rr", f"respiratory rate {value}"
+    if "temperature fahrenheit" in l:
+        return "temp", f"temperature {value} degrees Fahrenheit"
+    if "temperature celsius" in l:
+        return "temp", f"temperature {value} degrees Celsius"
+    return None, None
+
+
+def t_current_vitals(conn, a, actor):
+    hadm_id = resolve_patient(conn, a.get("patient"))
+    from grus_tools import GrusTools
+    res = GrusTools(conn, hadm_id).get_current_vitals()
+    if not res.found:
+        return _result(_prefix(conn, hadm_id) + "no vitals recorded.",
+                       {"hadm_id": hadm_id, "found": False})
+    got, latest_h = {}, None
+    for row, src in zip(res.rows, res.sources):
+        key, phrase = _vital_phrase(row["label"], row["value"])
+        if key and key not in got:
+            got[key] = (phrase, f"{src['table']}#{src['id']}")
+            if row.get("hours") is not None:
+                latest_h = max(latest_h or row["hours"], row["hours"])
+    parts = []
+    if "heart rate" in got:
+        parts.append(got["heart rate"][0])
+    if "sbp" in got and "dbp" in got:
+        parts.append(f"blood pressure {got['sbp'][0]} over {got['dbp'][0]}")
+    elif "sbp" in got:
+        parts.append(f"systolic pressure {got['sbp'][0]}")
+    for k in ("rr", "spo2", "temp"):
+        if k in got:
+            parts.append(got[k][0])
+    if not parts:
+        return _result(_prefix(conn, hadm_id) + "no core vitals recorded.",
+                       {"hadm_id": hadm_id, "found": False})
+    from grus_spoken import when
+    w = when(latest_h)
+    text = "latest vitals" + (f", {w}" if w else "") + ": " + \
+        ", ".join(parts) + "."
+    return _result(_prefix(conn, hadm_id) + text, {
+        "hadm_id": hadm_id,
+        "sources": sorted({s for _, s in got.values()})})
 
 
 # ---------------------------------------------------------- room tools
@@ -593,6 +721,21 @@ def _schema(props=None, required=()):
 
 
 TOOLS = {
+    "lab_value": (t_lab_value, False,
+        "FAST. One lab value for the patient, read straight from the "
+        "record: e.g. INR, potassium, haemoglobin, creatinine, lactate, "
+        "platelets. `which`: arrival, latest, lowest or highest. Prefer "
+        "this over ask_record for any single lab value.",
+        _schema({**_P, "lab": {"type": "string",
+                               "description": "e.g. 'INR', 'potassium'"},
+                 "which": {"type": "string",
+                           "enum": ["arrival", "latest", "lowest",
+                                    "highest"]}},
+                ["patient", "lab"])),
+    "current_vitals": (t_current_vitals, False,
+        "FAST. The patient's latest heart rate, blood pressure, respiratory "
+        "rate, oxygen saturation and temperature, straight from the record.",
+        _schema(_P, ["patient"])),
     "find_patient": (t_find_patient, False,
         "Find current patients whose admission number ends in the given "
         "digits.",
@@ -687,11 +830,15 @@ def run_tool(name, args, actor, conn=None):
         return _result(f"No tool named {name}.", error=True)
     fn = entry[0]
     own = conn is None
+    t0 = time.time()
     try:
         if own:
             conn = _connect()
+        t1 = time.time()
         out = fn(conn, args or {}, actor)
         conn.commit()
+        print(f"[grus_mcp] {name} ok connect={int((t1 - t0) * 1000)}ms "
+              f"total={int((time.time() - t0) * 1000)}ms", flush=True)
         return out
     except ToolError as e:
         conn.rollback()

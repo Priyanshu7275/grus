@@ -36,7 +36,12 @@ BOUNDARY = re.compile(r"(?:[.!?;](?=\s)|\n)")
 # computed, not stored) and the patient's age/sex ("82M", "65-year-old"),
 # which belong to the patient, not to the cited row.
 SET_ASIDE = re.compile(
-    r"@\s*-?\d+(?:\.\d+)?\s*h\b"
+    # The patient's own identifier ("patient ending 5843", "admission
+    # 22865843") is not a value of the cited row. Voice questions always
+    # name the patient, and the model often repeats it in the answer.
+    r"\b(?:patient|admission|hadm)(?:\s+(?:id|number|no\.?))?\s*"
+    r"(?:ending(?:\s+in)?\s*|#\s*)?\d{3,}\b"
+    r"|@\s*-?\d+(?:\.\d+)?\s*h\b"
     r"|\b-?\d+(?:\.\d+)?\s*(?:h|hrs?|hours?|mins?|minutes?|days?)\b(?:\s+ago)?"
     r"|\b\d{1,3}\s*(?:[MF]\b|yo\b|y/o\b|-?years?[- ]old\b)",
     re.I)
