@@ -24,7 +24,6 @@ import json
 import time
 from grus_valuecheck import index_result, check_values
 from typing import List, Dict, Optional
-from grus_spoken import lookup, to_speech
 from grus_valuecheck import ONE_TAG
 from grus_spoken import lookup, to_speech, SPOKEN_INSTRUCTION, split_spoken, choose_speech
 import boto3
@@ -300,8 +299,11 @@ def answer(conn, hadm_id: int, message: str,
 
         if not tool_uses:
             text = "".join(b.get("text", "") for b in blocks).strip()
-            text = re.sub(r"<think>.*?</think>", "", text,
-                          flags=re.DOTALL).strip()
+            # Qwen thinks in <think>, Nova in <thinking>. Neither belongs
+            # on screen or in Alexa's mouth.
+            text = re.sub(r"<think(?:ing)?>.*?</think(?:ing)?>", "", text,
+                          flags=re.DOTALL)
+            text = re.sub(r"</?think(?:ing)?>", "", text).strip()
             text, spoken_draft = split_spoken(text)
             text, value_rejected = check_values(text, values_by_source)
             cited = _extract_sources(text)
@@ -346,7 +348,7 @@ def answer(conn, hadm_id: int, message: str,
                 "answer": text,
                 "sources": valid,
                 "abstained": abstained,
-                "tools_called": calls,""
+                "tools_called": calls,
                 "speech": speech,
                 "speech_source": speech_source,          # "model" or "rules"
                 "retrieval": {
@@ -454,4 +456,3 @@ if __name__ == "__main__":
         print(f"  {r['latency_ms']}ms via {r['model'].split('.')[-1]}\n")
 
     conn.close()
-    
