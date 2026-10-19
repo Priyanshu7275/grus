@@ -28,6 +28,7 @@ import os
 import json
 import time
 import asyncio
+import threading
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
@@ -36,6 +37,7 @@ from psycopg.rows import dict_row, tuple_row
 from grus_config import DB
 from fastapi import FastAPI, HTTPException, Query, BackgroundTasks, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 
@@ -319,6 +321,70 @@ def get_brief(
         raise HTTPException(404, {"code": "PATIENT_NOT_FOUND",
                                   "message": f"No admission {hadm_id}."})
 
+    # A brief can take up to a minute; proxies in front of us (Vercel,
+    # the load balancer) cut long requests off. So the brief is built in
+    # the background: wait up to BRIEF_WAIT_S, and if it isn't ready,
+    # answer 202 "pending". The client asks again; the same job is
+    # reused, never started twice.
+    with _brief_jobs_lock:
+        job = _brief_jobs.get(key)
+        if job is None:
+            job = {"done": threading.Event(), "result": None}
+            _brief_jobs[key] = job
+            threading.Thread(target=_run_brief_job,
+                             args=(key, hadm_id, as_of_hours),
+                             daemon=True).start()
+
+    if job["done"].wait(BRIEF_WAIT_S):
+        with _brief_jobs_lock:
+            if _brief_jobs.get(key) is job:
+                del _brief_jobs[key]
+        return job["result"]
+
+    return JSONResponse(status_code=202, content={
+        "status": "pending",
+        "hadm_id": hadm_id,
+        "as_of_hours": as_of_hours,
+        "message": "Brief is still being generated. Ask again in a few "
+                   "seconds.",
+    })
+
+
+BRIEF_WAIT_S = 20
+_brief_jobs: Dict[str, Dict[str, Any]] = {}
+_brief_jobs_lock = threading.Lock()
+# The agent graph keeps per-patient state on a shared Session class, so
+# two briefs must not run at the same moment.
+_brief_run_lock = threading.Lock()
+
+
+def _run_brief_job(key, hadm_id, as_of_hours):
+    job = _brief_jobs[key]
+    try:
+        result = _build_brief(hadm_id, as_of_hours)
+    except Exception as e:                       # even the fallback failed
+        result = {"hadm_id": hadm_id, "as_of_hours": as_of_hours,
+                  "degraded": True, "error": str(e)[:200],
+                  "message": "Brief unavailable.", "alerts": [],
+                  "disclaimer": "Decision support, not diagnosis."}
+    if not result.get("degraded"):
+        _brief_cache[key] = result               # only real briefs are cached
+    job["result"] = result
+    job["done"].set()
+
+
+def _build_brief(hadm_id, as_of_hours):
+    """Generate one brief on its own database connection."""
+    from grus_config import connect
+    conn = connect(row_factory=tuple_row)
+    try:
+        with _brief_run_lock:
+            return _build_brief_on(conn, hadm_id, as_of_hours)
+    finally:
+        conn.close()
+
+
+def _build_brief_on(conn, hadm_id, as_of_hours):
     t0 = time.time()
     try:
         from grus_agents import generate_brief, check_citations, Session
@@ -335,6 +401,10 @@ def get_brief(
         # A brief that cannot be generated must not leave a blank screen.
         # A doctor with unformatted data is better off than one with a
         # spinner, so fall back to the rule engine alone.
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         from grus_rules import evaluate
         alerts = evaluate(conn, hadm_id, as_of_hours, persist=False)
         return {
@@ -348,7 +418,7 @@ def get_brief(
             "disclaimer": "Decision support, not diagnosis.",
         }
 
-    payload = {
+    return {
         "hadm_id": hadm_id,
         "as_of_hours": as_of_hours,
         "generated_at": datetime.utcnow().isoformat() + "Z",
@@ -364,8 +434,6 @@ def get_brief(
         "cached": False,
         "disclaimer": "Decision support, not diagnosis.",
     }
-    _brief_cache[key] = payload
-    return payload
 
 
 # ---------------------------------------------------------------
