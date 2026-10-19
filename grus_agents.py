@@ -431,13 +431,16 @@ RED FLAGS      each critical and warning alert, with its action
 CURRENT STATE  vitals and key labs with timing
 HISTORY        prior admissions and recurring conditions, if any
 CRITICAL UNKNOWNS
-                              only what the data explicitly marks absent or unreliable.
-               Name each one specifically: a vital sign, a lab, a history
-               item, a medication status. Never write a vague catch-all line.
+               Only what the data above explicitly marks absent or
+               unreliable. Name each one specifically (a vital sign, a lab,
+               a history item, a medication status) using ONLY names that
+               appear in the data above. Never copy the examples below;
+               they show the shape of a line, not its content. If the data
+               marks nothing absent or unreliable, write "None identified."
 
-               Good: "No allergy history recorded at this facility."
-               Good: "Medication timing unreliable for fentanyl and vancomycin."
-               Bad:  "No data after admission 20015722."
+               Shape: "No <specific item> recorded at this facility."
+               Shape: "Medication timing unreliable for <drug names from the data>."
+               Bad:   "No data after admission 20015722."  (vague)
 
 CITATIONS
 
