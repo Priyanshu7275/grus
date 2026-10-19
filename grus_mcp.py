@@ -127,10 +127,28 @@ def _ago(ts, now=None):
     return f"{h} hour{'s' if h != 1 else ''} ago"
 
 
+_ACRONYMS = {"INR", "NSAID", "NSAIDS", "AKI", "BP", "SBP", "PE", "ICU", "ECG",
+             "HR", "CKD", "GI", "DVT", "KDIGO", "SIRS", "SOFA", "QSOFA"}
+
+
 def _plain_title(title):
-    """'SHOCK INDEX - SEVERE' -> 'Shock index, severe' for the ear."""
-    t = re.sub(r"\s*[—-]\s*", ", ", title.strip()).lower()
+    """'SHOCK INDEX - SEVERE' -> 'Shock index, severe'; 'INR' stays 'INR'."""
+    t = re.sub(r"\s*[—-]\s+|\s+[—-]\s*", ", ", title.strip())
+    words = [w if w.upper().strip(",.()") in _ACRONYMS else w.lower()
+             for w in t.split()]
+    t = " ".join(words)
     return t[:1].upper() + t[1:]
+
+
+def _speak_hours(text):
+    """
+    Rule bodies carry record hours ('nadir 6.9 at 771h'). MIMIC dates are
+    shifted, so say where on the admission it falls instead.
+    """
+    from grus_spoken import when
+
+    return re.sub(r"(?:\bat |@ ?)?\b(\d+(?:\.\d+)?)\s?h\b",
+                  lambda m: when(float(m.group(1))) or m.group(0), text)
 
 
 def resolve_patient(conn, patient):
@@ -260,15 +278,20 @@ def t_get_alerts(conn, a, actor):
     if not shown:
         text = "No critical or warning alerts from the rule engine."
     else:
+        # All titles, but the detail only for the most severe one: four
+        # full alerts read aloud is too long to hold in your head.
         bits = []
-        for x in shown:
+        for i, x in enumerate(shown):
             label = {"critical": "Critical", "warning": "Warning",
                      "unknown": "Can't assess"}[x.severity]
             line = f"{label}: {_plain_title(x.title)}."
-            if x.severity == "critical" and x.body:
-                line += f" {x.body}"
+            if i == 0 and x.body:
+                line += " " + _speak_hours(x.body.strip())
             bits.append(line)
-        text = " ".join(bits)
+        n = len(shown)
+        text = (f"{n} alert{'s' if n != 1 else ''}. " + " ".join(bits)
+                + (" Ask about any of them for details." if n > 1 else ""))
+        text = re.sub(r"\s{2,}", " ", text)
     return _result(_prefix(conn, hadm_id) + speak_units(text), {
         "hadm_id": hadm_id,
         "alerts": [{"code": x.code, "severity": x.severity, "title": x.title,
@@ -664,8 +687,9 @@ def run_tool(name, args, actor, conn=None):
         return _result(f"No tool named {name}.", error=True)
     fn = entry[0]
     own = conn is None
-    conn = conn or _connect()
     try:
+        if own:
+            conn = _connect()
         out = fn(conn, args or {}, actor)
         conn.commit()
         return out
@@ -673,12 +697,16 @@ def run_tool(name, args, actor, conn=None):
         conn.rollback()
         return _result(str(e), error=True)
     except Exception as e:                       # never leak a traceback
-        conn.rollback()
+        if conn is not None:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
         print(f"[grus_mcp] {name} failed: {e!r}")
         return _result("Something went wrong reading the record, so I "
                        "can't answer that right now.", error=True)
     finally:
-        if own:
+        if own and conn is not None:
             conn.close()
 
 
