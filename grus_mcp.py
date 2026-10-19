@@ -723,10 +723,11 @@ def _schema(props=None, required=()):
 
 TOOLS = {
     "lab_value": (t_lab_value, False,
-        "FAST. One lab value for the patient, read straight from the "
-        "record: e.g. INR, potassium, haemoglobin, creatinine, lactate, "
-        "platelets. `which`: arrival, latest, lowest or highest. Prefer "
-        "this over ask_record for any single lab value.",
+        "INSTANT. Use for ANY question about one lab value: 'what was the "
+        "INR on arrival', 'latest potassium', 'lowest haemoglobin', "
+        "creatinine, lactate, platelets, sodium, glucose, troponin. "
+        "`which`: arrival, latest, lowest or highest (default latest). "
+        "Always use this instead of ask_record for a single lab value.",
         _schema({**_P, "lab": {"type": "string",
                                "description": "e.g. 'INR', 'potassium'"},
                  "which": {"type": "string",
@@ -734,8 +735,10 @@ TOOLS = {
                                     "highest"]}},
                 ["patient", "lab"])),
     "current_vitals": (t_current_vitals, False,
-        "FAST. The patient's latest heart rate, blood pressure, respiratory "
-        "rate, oxygen saturation and temperature, straight from the record.",
+        "INSTANT. Use for 'current vitals', 'how are the vitals', 'what's "
+        "the blood pressure / heart rate / sats / temperature'. Latest "
+        "heart rate, blood pressure, respiratory rate, oxygen saturation "
+        "and temperature, straight from the record.",
         _schema(_P, ["patient"])),
     "find_patient": (t_find_patient, False,
         "Find current patients whose admission number ends in the given "
@@ -745,9 +748,12 @@ TOOLS = {
         "Current patients, most urgent first (risk level, then alert count).",
         _schema({"limit": {"type": "integer", "minimum": 1, "maximum": 10}})),
     "ask_record": (t_ask_record, False,
-        "Answer any clinical question about the patient from their record "
-        "(labs, vitals, meds, notes, history). The answer is checked "
-        "against the record before it is returned. Read `text` as written.",
+        "SLOWER (a few seconds). Clinical questions that need reasoning "
+        "over the record: medications, why/when something happened, "
+        "history, notes, trends. NOT for a single lab value (use "
+        "lab_value), current vitals (use current_vitals) or alerts (use "
+        "get_alerts): those are instant. The answer is checked against the "
+        "record before it is returned. Say `text` word for word.",
         _schema({**_P, "question": {"type": "string"}},
                 ["patient", "question"])),
     "get_alerts": (t_get_alerts, False,
