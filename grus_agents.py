@@ -428,7 +428,10 @@ STRUCTURE
 
 SUMMARY        one line: age, sex, presentation, most important finding
 RED FLAGS      each critical and warning alert, with its action
-CURRENT STATE  vitals and key labs with timing
+CURRENT STATE  the LATEST value of each vital and key lab, with timing.
+               If a later value exists, never show a pre-arrival or
+               arrival value here; those belong in SUMMARY or RED FLAGS.
+               Label a value "(arrival)" only if it is the only one.
 HISTORY        prior admissions and recurring conditions, if any
 CRITICAL UNKNOWNS
                Only what the data above explicitly marks absent or

@@ -325,6 +325,10 @@ def get_brief(
         result = generate_brief(conn, hadm_id, as_of_hours, verbose=False)
         node = result.results.get("composer")
         text = str(node.result) if node else ""
+        # Database shorthand -> clinician wording (rule codes, admission
+        # types, raw hours). Ids and values are untouched.
+        from grus_brieftext import tidy_brief
+        text = tidy_brief(text)
         valid, invalid, pct = check_citations(text)
         agents_run = list(result.results.keys())
     except Exception as e:
