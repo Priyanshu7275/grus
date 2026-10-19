@@ -48,7 +48,25 @@ _UNITS_SPOKEN = [
 def speak_units(text):
     for pat, rep in _UNITS_SPOKEN:
         text = re.sub(pat, rep, text)
-    return text
+    return _speak_hours(text)
+
+
+def _speak_hours(text):
+    """
+    "stopped about 499 hours after arrival" -> "stopped on day 21 of the
+    admission". Nobody counts in hundreds of hours aloud. Under 48 hours
+    stays as hours, which is how clinicians say it.
+    """
+    def rep(m):
+        h = float(m.group(1))
+        if h < 48:
+            return m.group(0)
+        return f"on day {int(h // 24) + 1} of the admission"
+    return re.sub(
+        r"\b(?:at\s+|about\s+|around\s+|approximately\s+)?"
+        r"(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h)\s+"
+        r"(?:after|since|into|post)\s+(?:the\s+)?(?:arrival|admission)\b",
+        rep, text, flags=re.I)
 
 
 def _hours(n):
