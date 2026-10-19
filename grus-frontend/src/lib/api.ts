@@ -133,11 +133,21 @@ export const api = {
     );
   },
 
-  getBrief(hadmId: number, params: { as_of_hours?: number; refresh?: boolean } = {}) {
-    return withFallback(
-      () => request<BriefResult>(`/patients/${hadmId}/brief${qs(params)}`),
-      () => demo.demoBrief(hadmId)
-    );
+    async getBrief(hadmId: number, params: { as_of_hours?: number; refresh?: boolean } = {}) {
+    const deadline = Date.now() + 3 * 60 * 1000;
+    let query = params;
+    for (;;) {
+      const r = await request<BriefResult & { status?: string }>(
+        `/patients/${hadmId}/brief${qs(query)}`
+      );
+      if (r.status !== "pending") return r as BriefResult;
+      if (Date.now() > deadline) {
+        throw new Error("The brief is taking longer than usual. Please reload the page.");
+      }
+      // Keep asking for the same job; never re-send refresh=true.
+      query = { ...params, refresh: undefined };
+      await new Promise((res) => setTimeout(res, 4000));
+    }
   },
 
   getAlerts(hadmId: number, params: { as_of_hours?: number } = {}) {
