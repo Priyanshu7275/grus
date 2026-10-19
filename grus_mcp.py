@@ -68,9 +68,10 @@ Rules:
 1. Every patient tool needs `patient`: the last 4 digits of the admission
    number the clinician says ("patient ending 2254"). If a tool says the
    digits match more than one patient, ask for more digits.
-2. Read the `text` of each result exactly as written. It is already
-   checked against the record. Do not add, round, or change any number,
-   and never state a clinical value no tool returned.
+2. Say the `text` of each result word for word. It has already been
+   checked against the record. Do not add units, explanations, medical
+   background, likely causes or advice, and do not reword it. Never state
+   a clinical fact that is not in `text`.
 3. A single lab value -> lab_value. Current vitals -> current_vitals.
    Alerts -> get_alerts. Any other clinical question -> ask_record.
 4. "Log ...", "note ...", "record ..." -> log_event.
@@ -248,9 +249,9 @@ def t_ask_record(conn, a, actor):
     # the question so the model doesn't echo the id back as if it were a
     # value of the record.
     question = re.sub(
-        r"\s*\b(?:for|of|on|about)?\s*(?:the\s+)?patient\s+"
-        r"(?:ending\s+(?:in\s+)?|number\s+|#\s*)?\d{3,}\b", "", question,
-        flags=re.I).strip(" ,") or question
+        r"\b(?:the\s+)?patient\s+(?:ending\s+(?:in\s+)?|number\s+|#\s*)?"
+        r"\d{3,}\b", "this patient", question, flags=re.I).strip(" ,") \
+        or question
     if not question:
         raise ToolError("What would you like to know?")
     sid = _open_session(conn, hadm_id)
@@ -888,15 +889,27 @@ async def _list_tools(ctx, params):
         for name, (_, writes, desc, schema) in TOOLS.items()])
 
 
+# For clinical answers, the agent gets ONLY the checked sentence and the
+# ids, not the raw values behind it: given the raw data, a voice agent
+# composes its own sentence (adding units, rewording), and what it says
+# is no longer what was checked.
+_SPEAK_ONLY = {"ask_record", "get_alerts", "lab_value", "current_vitals",
+               "calculate_score", "recall", "prepare_handover"}
+_KEEP_KEYS = {"hadm_id", "source", "sources", "event", "found"}
+
+
 async def _call_tool(ctx, params):
     headers = ctx.request.headers if ctx.request is not None else {}
     actor = _actor_for(headers.get("authorization")) or "unknown"
     out = await anyio.to_thread.run_sync(
         run_tool, params.name, dict(params.arguments or {}), actor)
+    data = out["data"]
+    if params.name in _SPEAK_ONLY:
+        data = {k: v for k, v in data.items() if k in _KEEP_KEYS}
     return types.CallToolResult(
         content=[types.TextContent(type="text", text=out["text"])],
         structuredContent=json.loads(json.dumps(
-            {"text": out["text"], **out["data"]}, default=str)),
+            {"text": out["text"], **data}, default=str)),
         isError=out["error"])
 
 

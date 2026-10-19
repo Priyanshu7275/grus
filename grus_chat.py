@@ -22,7 +22,7 @@ import os
 import re
 import json
 import time
-from grus_valuecheck import index_result, check_values
+from grus_valuecheck import index_result, check_values, remove_speculation
 from typing import List, Dict, Optional
 from grus_valuecheck import ONE_TAG
 from grus_spoken import lookup, to_speech, SPOKEN_INSTRUCTION, split_spoken, choose_speech
@@ -317,6 +317,12 @@ def answer(conn, hadm_id: int, message: str,
             text = re.sub(r"</?think(?:ing)?>", "", text).strip()
             text, spoken_draft = split_spoken(text)
             text, value_rejected = check_values(text, values_by_source)
+            text, speculation_removed = remove_speculation(text)
+            if speculation_removed:
+                spoken_draft = None      # the draft may carry the same guess
+            if not text.strip():
+                text = ("The record does not state that. Ask the patient, "
+                        "family or treating team.")
             cited = _extract_sources(text)
             valid = [c for c in cited if c in sources_seen]
             invented = [c for c in cited if c not in sources_seen]
@@ -369,6 +375,7 @@ def answer(conn, hadm_id: int, message: str,
                     "citations_removed": len(invented),
                     "values_rejected": value_rejected,
                     "speech_fallback_reason": speech_reason,
+                    "speculation_removed": speculation_removed,
                     
                 },
                 "model": model,

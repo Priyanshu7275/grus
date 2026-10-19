@@ -186,3 +186,46 @@ def _remove_uncited(text):
             end = "\n" if sent.endswith("\n") else ""
             parts[i] = lead + REMOVED + ("." if not end else "") + end
     return "".join(parts), rejected
+
+# ----------------------------------------------------------------------
+# Speculation
+# ----------------------------------------------------------------------
+# A model asked "why" will reach for a plausible cause: "likely due to
+# cirrhosis", "often associated with anticoagulation". The record rarely
+# states the indication, and a confident guess is the most dangerous
+# thing a clinical assistant can say. Instructions alone did not stop it
+# (tested twice), so, like numbers, it is checked in code: a sentence
+# that speculates about cause or meaning is removed and reported.
+
+SPECULATION = re.compile(
+    r"\b(?:likely|probably|possibly|presumably|perhaps)\b"
+    r"|\bmay\s+(?:suggest|indicate|reflect|explain|imply|be\s+(?:due|related|"
+    r"managed|because|a\s+sign))"
+    r"|\bmight\s+(?:be|suggest|indicate|explain)\b"
+    r"|\bcould\s+(?:be|suggest|indicate|explain)\b"
+    r"|\b(?:often|commonly|typically|usually)\s+(?:associated|seen|linked)\b"
+    r"|\bit\s+is\s+possible\b"
+    r"|\bdue\s+to\s+the\s+risk\b"
+    r"|\bwhich\s+(?:suggests|indicates|implies)\b"
+    r"|\bconsistent\s+with\b"
+    r"|\bsuggestive\s+of\b",
+    re.I)
+
+
+def remove_speculation(text):
+    """
+    Returns (text, removed). Each removed item is the sentence dropped.
+    Citations that only belonged to a dropped sentence go with it.
+    """
+    parts = [m.group(0) for m in _SENTENCES.finditer(text or "") if m.group(0)]
+    kept, removed = [], []
+    for sent in parts:
+        if SPECULATION.search(sent):
+            removed.append(sent.strip())
+            if sent.endswith("\n"):
+                kept.append("\n")
+            continue
+        kept.append(sent)
+    out = "".join(kept)
+    out = re.sub(r"[ \t]{2,}", " ", out).strip()
+    return out, removed

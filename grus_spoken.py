@@ -296,6 +296,9 @@ def choose_speech(draft, checked_text, rule_speech):
         return rules("draft too long")
     if _NUMBER_WORDS.search(draft):
         return rules("draft spells out a number")
+    from grus_valuecheck import SPECULATION
+    if SPECULATION.search(draft):
+        return rules("draft speculates about a cause")
     allowed = _nums(checked_text) | _nums(rule_speech)
     extra = [n for n in _nums(draft)
              if not any(abs(n - a) < 1e-9 for a in allowed)]
