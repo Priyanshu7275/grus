@@ -1,22 +1,7 @@
 """
 GRUS — Scenario replay
 
-Drives a simulated patient hour by hour so the brief updates as their
-state changes.
 
-THE VITALS IN THIS FILE ARE SYNTHETIC. They were written to be
-clinically coherent, not sampled from a real admission. Every patient
-created here carries simulated=True, a 9-prefixed id, and a SIMULATED
-badge wherever they appear. The 301 MIMIC patients are real and are
-never mixed with these.
-
-Two scenarios, both starting from the same patient record, so a demo can
-show the same system reaching different conclusions from different
-physiology.
-
-    python grus_scenario.py create haemorrhage
-    python grus_scenario.py run <hadm_id>          replay in real time
-    python grus_scenario.py step <hadm_id>         advance one hour
 """
 
 import os
@@ -33,20 +18,7 @@ HOST = DB.HOST
 PWD = DB.PASSWORD
 
 
-# ---------------------------------------------------------------
-# Scenarios
-#
-# Written to follow the physiology rather than to look dramatic:
-#
-#   In haemorrhage the heart rate rises BEFORE the pressure falls. A
-#   young patient compensates for a long time and then decompensates
-#   quickly, which is exactly what makes it dangerous. Lactate follows
-#   perfusion, so it lags the pulse.
-#
-#   In cardiac failure the pressure falls with a heart rate that cannot
-#   compensate, and the lungs fill — so saturation falls early while
-#   lactate rises late.
-# ---------------------------------------------------------------
+
 
 HAEMORRHAGE = {
     "name": "Post-traumatic haemorrhage",

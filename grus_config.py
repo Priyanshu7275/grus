@@ -95,7 +95,7 @@ def connect(row_factory=None):
     kwargs = dict(
         host=DB.HOST, port=DB.PORT, dbname=DB.NAME, user=DB.USER,
         password=DB.PASSWORD, sslmode=DB.SSLMODE,
-        connect_timeout=15, keepalives=1, keepalives_idle=30,
+        connect_timeout=40, keepalives=1, keepalives_idle=30,
     )
     if row_factory is not None:
         kwargs["row_factory"] = row_factory

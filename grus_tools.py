@@ -20,6 +20,7 @@ for it.
 """
 
 import os
+import re
 import json
 import psycopg
 from grus_config import DB
@@ -177,6 +178,31 @@ class GrusTools:
               {self.r._cap()}
             ORDER BY hours_since_admit
         """, (self.hadm_id, label)).fetchall()
+
+        # The model sometimes mangles a label ("INR(PT" for "INR(PT)",
+        # "inr" for "INR(PT)"). Retry with a forgiving match, but only
+        # when exactly ONE lab on file fits; never guess between two.
+        if not rows:
+            def _norm(s):
+                return re.sub(r"[^a-z0-9]", "", (s or "").lower())
+            want = _norm(label)
+            on_file = [r[0] for r in self.conn.execute(
+                "SELECT DISTINCT label FROM labs WHERE hadm_id = %s "
+                "AND valuenum IS NOT NULL", (self.hadm_id,)).fetchall()]
+            exact = [l for l in on_file if _norm(l) == want]
+            prefix = [l for l in on_file if want and _norm(l).startswith(want)]
+            match = (exact if len(exact) == 1
+                     else prefix if len(prefix) == 1 else [])
+            if match:
+                label = match[0]
+                rows = self.conn.execute(f"""
+                    SELECT lab_id, label, valuenum, valueuom, hours_since_admit,
+                           flag, ref_range_lower, ref_range_upper
+                    FROM labs
+                    WHERE hadm_id = %s AND label = %s AND valuenum IS NOT NULL
+                      {self.r._cap()}
+                    ORDER BY hours_since_admit
+                """, (self.hadm_id, label)).fetchall()
 
         args = {"label": label, "mode": mode}
 

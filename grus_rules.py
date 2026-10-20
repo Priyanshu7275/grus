@@ -537,19 +537,27 @@ def rule_unreliable_med_timing(v: PatientView):
     important = [r for r in rows if r[2] in
                  ("anticoagulant", "antiplatelet", "vasopressor", "insulin")]
     target = important or rows
-    drugs = ", ".join(sorted({r[1] for r in target}))
+    
+
+    drug_list = ", ".join([r[1] for r in target])
+    source_lines = " · ".join(
+        f"{r[1]} → medications#{r[0]}" for r in target)
 
     return Alert(
         "MED_TIMING_UNRELIABLE",
         "warning" if important else "info",
-        "MEDICATION STATUS UNRELIABLE",
-        f"{drugs}: the pharmacy record has a stop time before its start time. "
-        f"Whether this is running cannot be determined from the record.",
+        f"Check with nurse — {drug_list}",
+        f"Problem: The pharmacy record shows {drug_list} stopping "
+        f"before they started. This is likely a data-entry error.\n"
+        f"Why it matters: We can't tell if the patient is still "
+        f"receiving them.\n"
+        f"Action: Ask the bedside nurse if each drug is running right "
+        f"now.\n"
+        f"Source: {source_lines}",
         "CONFIRM with the bedside nurse.",
         {"drugs": [r[1] for r in target]},
         [{"table": "medications", "id": r[0]} for r in target],
     )
-
 
 def rule_thrombocytopenia(v: PatientView):
     """
