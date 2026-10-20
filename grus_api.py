@@ -42,8 +42,10 @@ from pydantic import BaseModel, Field
 
 
 
+
 HOST = DB.HOST
 PWD = DB.PASSWORD
+
 
 app = FastAPI(
     title="GRUS",
@@ -64,6 +66,10 @@ app.add_middleware(
 
 from grus_mcp import attach_mcp
 attach_mcp(app)
+from grus_mcp import attach_mcp
+attach_mcp(app)
+from grus_voice import router as voice_router
+app.include_router(voice_router)
 # ---------------------------------------------------------------
 # Database
 # ---------------------------------------------------------------
