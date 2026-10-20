@@ -146,6 +146,18 @@ class ScoreEngine:
             ORDER BY {order} LIMIT 1
         """, (self.hadm_id, code)).fetchone()
 
+        # Scores are defined in Celsius, but many records chart Fahrenheit
+        # only. Without this the score asked for a temperature it had.
+        if not r and code == "temp_c":
+            f = self.conn.execute(f"""
+                SELECT vital_id, valuenum FROM vitals
+                WHERE hadm_id = %s AND vital_code = 'temp_f'
+                  AND valuenum IS NOT NULL {self._cap()}
+                ORDER BY {order} LIMIT 1
+            """, (self.hadm_id,)).fetchone()
+            if f:
+                r = (f[0], round((float(f[1]) - 32) * 5 / 9, 1))
+
         out = (float(r[1]), {"table": "vitals", "id": r[0]}) if r else (None, None)
         self._cache[key] = out
         return out
@@ -292,9 +304,20 @@ class ScoreEngine:
         # A value the clinician supplied overrides anything found.
         if key in provided:
             v = provided[key]
+            note = "supplied by clinician"
+            # "101" said at the bedside is Fahrenheit; no one is at 101 C.
+            if spec.get("field") == "temp_c":
+                try:
+                    num = float(v)
+                    if num > 45:
+                        v = round((num - 32) * 5 / 9, 1)
+                        note = f"supplied by clinician as {num:g} F"
+                    else:
+                        v = num
+                except (TypeError, ValueError):
+                    pass
             pts = self._points_from(spec, v, supplied=True)
-            return InputValue(key, label, kind, True, v, pts,
-                              note="supplied by clinician")
+            return InputValue(key, label, kind, True, v, pts, note=note)
 
         if kind == "demo":
             v = self.age if spec["field"] == "age" else self.sex
@@ -304,8 +327,10 @@ class ScoreEngine:
         if kind == "vital":
             v, src = self._vital(spec["field"], spec.get("aggregate", "latest"))
             if v is None:
-                return InputValue(key, label, kind, False,
-                                  ask=f"What is the {label.lower()}?")
+                ask = (f"What is the temperature (Celsius or Fahrenheit)?"
+                       if spec.get("field") == "temp_c"
+                       else f"What is the {label.lower()}?")
+                return InputValue(key, label, kind, False, ask=ask)
             return InputValue(key, label, kind, True, v,
                               self._points_from(spec, v) or 0, src)
 

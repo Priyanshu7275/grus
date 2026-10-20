@@ -70,6 +70,8 @@ from grus_mcp import attach_mcp
 attach_mcp(app)
 from grus_voice import router as voice_router
 app.include_router(voice_router)
+from grus_room_api import router as room_router
+app.include_router(room_router)
 # ---------------------------------------------------------------
 # Database
 # ---------------------------------------------------------------
