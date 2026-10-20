@@ -309,30 +309,197 @@ def t_get_alerts(conn, a, actor):
                    for x in alerts]})
 
 
-def t_calculate_score(conn, a, actor):
-    hadm_id = resolve_patient(conn, a.get("patient"))
+# ------------------------------------------------ guided scores
+# "What's the HAS-BLED?" -> GRUS asks each missing criterion one at a
+# time ("Question 1 of 6: prior stroke? Yes or no.") and gives the score
+# when the last one is answered. The answers so far are kept HERE, in the
+# database, per patient and per speaker, so the voice agent only relays
+# "yes" / "no" and nothing depends on it remembering earlier turns.
+
+_SCORE_SESSIONS = """
+CREATE TABLE IF NOT EXISTS score_sessions (
+    hadm_id     BIGINT NOT NULL,
+    actor       TEXT NOT NULL,
+    score       TEXT NOT NULL,
+    provided    JSONB NOT NULL DEFAULT '{}',
+    n_questions INTEGER NOT NULL,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (hadm_id, actor)
+)"""
+_score_table_ready = False
+
+_YES = {"yes", "y", "yeah", "yep", "yup", "present", "true", "positive",
+        "correct", "affirmative", "it is", "he has", "she has", "has"}
+_NO = {"no", "n", "nope", "absent", "false", "negative", "none", "not",
+       "no it isn't", "it isn't", "he hasn't", "she hasn't"}
+
+
+def _score_table(conn):
+    global _score_table_ready
+    if not _score_table_ready:
+        conn.execute(_SCORE_SESSIONS)
+        _score_table_ready = True
+
+
+def _compute_score(conn, hadm_id, score_name, provided):
     from grus_tools import GrusTools, dispatch
     res = dispatch(GrusTools(conn, hadm_id), "calculate_score",
-                   {"score_name": a.get("score_name"),
-                    "provided": a.get("provided") or {}})
+                   {"score_name": score_name, "provided": provided or {}})
     if not res.found or not res.rows:
-        return _result(_prefix(conn, hadm_id) + res.summary)
-    d = res.rows[0]
-    missing = (d.get("components") or {}).get("missing") or []
-    if d.get("total") is None:
-        asks = " ".join(
-            q if q.endswith("?") else q + "?"
-            for q in ((m.get("ask") or m["label"]).strip() for m in missing))
-        text = (f"{d['name']}: the record can't supply {len(missing)} "
-                f"criteri{'a' if len(missing) != 1 else 'on'}, so there is "
-                f"no total. {asks}")
+        raise ToolError(res.summary)
+    return res.rows[0]
+
+
+def _input_spec(score_key, key):
+    from grus_scores import SCORES
+    for inp in SCORES.get(score_key, {}).get("inputs", []):
+        if inp.get("key") == key:
+            return inp
+    return {}
+
+
+def _ask(d, m, number, of):
+    q = (m.get("ask") or m["label"]).strip()
+    # Spoken, the screen's bracketed note is shortened and unbracketed:
+    # "Prior stroke? Not in the coded record."
+    note = ""
+    mm = re.search(r"\s*\(([^)]*)\)\s*$", q)
+    if mm:
+        q = q[:mm.start()].strip()
+        note = (" Not in the coded record." if "coded" in mm.group(1)
+                else " " + mm.group(1).rstrip(".") + ".")
+    if not q.endswith("?"):
+        q += "?"
+    q += note
+    spec = _input_spec(d.get("score"), m.get("key"))
+    if "scale" in spec:
+        opts = list(spec["scale"])
+        how = "Say " + ", ".join(opts[:-1]) + " or " + opts[-1] + "."
+    elif spec.get("kind") in ("vital", "lab") or "test" in spec:
+        how = "Say the value."
     else:
-        text = (f"{d['name']} is {d['total']}"
-                + (f" out of {d['max_possible']}" if d.get("max_possible")
-                   else "")
-                + (f", {d['risk']} risk" if d.get("risk") else "") + "."
-                + (f" {d['interpretation']}" if d.get("interpretation")
-                   else ""))
+        how = "Yes or no?"
+    return f"Question {number} of {of}: {q} {how}"
+
+
+def _final_text(d):
+    text = (f"{d['name']} is {d['total']}"
+            + (f" out of {d['max_possible']}" if d.get("max_possible") else "")
+            + (f", {d['risk']} risk" if d.get("risk") else "") + ".")
+    if d.get("interpretation"):
+        text += f" {d['interpretation']}"
+    return text
+
+
+def _from_record(d):
+    found = (d.get("components") or {}).get("found") or []
+    pts = sum(float(f.get("points") or 0) for f in found)
+    pts = int(pts) if pts == int(pts) else pts
+    return (f"The record gives {pts} point{'s' if pts != 1 else ''} "
+            f"from {len(found)} criteri{'a' if len(found) != 1 else 'on'}.")
+
+
+def _parse_answer(raw, spec):
+    a = (raw or "").strip().lower().rstrip(".!")
+    if "scale" in spec:
+        for opt in spec["scale"]:
+            if opt in a or a in opt:
+                return opt
+        return None
+    if re.fullmatch(r"-?\d+(?:\.\d+)?", a):
+        return float(a)
+    if a in _YES or a.startswith("yes"):
+        return "yes"
+    if a in _NO or a.startswith("no"):
+        return "no"
+    return None
+
+
+def t_calculate_score(conn, a, actor):
+    hadm_id = resolve_patient(conn, a.get("patient"))
+    d = _compute_score(conn, hadm_id, a.get("score_name"),
+                       a.get("provided") or {})
+    missing = (d.get("components") or {}).get("missing") or []
+    if d.get("total") is not None or not missing:
+        text = _final_text(d) if d.get("total") is not None else \
+            f"{d['name']}: {d.get('note') or 'no total could be given.'}"
+        return _result(_prefix(conn, hadm_id) + speak_units(text),
+                       {"hadm_id": hadm_id, "score": d})
+
+    # Start a guided session: remember the score, ask the first question.
+    _score_table(conn)
+    conn.execute(
+        "INSERT INTO score_sessions (hadm_id, actor, score, provided, "
+        "n_questions) VALUES (%s,%s,%s,%s,%s) "
+        "ON CONFLICT (hadm_id, actor) DO UPDATE SET score = EXCLUDED.score, "
+        "provided = EXCLUDED.provided, n_questions = EXCLUDED.n_questions, "
+        "updated_at = now()",
+        (hadm_id, actor, d["score"], json.dumps(a.get("provided") or {}),
+         len(missing)))
+    text = (f"{d['name']}. {_from_record(d)} I need {len(missing)} "
+            f"answer{'s' if len(missing) != 1 else ''} to finish. "
+            + _ask(d, missing[0], 1, len(missing)))
+    return _result(_prefix(conn, hadm_id) + speak_units(text),
+                   {"hadm_id": hadm_id, "question": missing[0].get("key")})
+
+
+def t_answer_score(conn, a, actor):
+    hadm_id = resolve_patient(conn, a.get("patient"))
+    _score_table(conn)
+    row = conn.execute(
+        "SELECT score, provided, n_questions FROM score_sessions "
+        "WHERE hadm_id = %s AND actor = %s", (hadm_id, actor)).fetchone()
+    if not row:
+        raise ToolError("There is no score in progress for this patient. "
+                        "Which score would you like?")
+    score, provided, n_total = row
+    provided = provided if isinstance(provided, dict) else json.loads(provided)
+
+    raw = (a.get("answer") or "").strip()
+    if raw.lower() in ("stop", "cancel", "never mind", "nevermind"):
+        conn.execute("DELETE FROM score_sessions WHERE hadm_id = %s AND "
+                     "actor = %s", (hadm_id, actor))
+        return _result(_prefix(conn, hadm_id) + "score cancelled.",
+                       {"hadm_id": hadm_id})
+
+    d = _compute_score(conn, hadm_id, score, provided)
+    missing = (d.get("components") or {}).get("missing") or []
+    if not missing:                       # already complete
+        conn.execute("DELETE FROM score_sessions WHERE hadm_id = %s AND "
+                     "actor = %s", (hadm_id, actor))
+        return _result(_prefix(conn, hadm_id) + speak_units(_final_text(d)),
+                       {"hadm_id": hadm_id, "score": d})
+
+    current = missing[0]
+    spec = _input_spec(score, current.get("key"))
+    value = _parse_answer(raw, spec)
+    asked_no = n_total - len(missing) + 1
+    if value is None:
+        return _result(_prefix(conn, hadm_id) + "I didn't catch that. "
+                       + _ask(d, current, asked_no, n_total),
+                       {"hadm_id": hadm_id, "question": current.get("key")})
+
+    provided[current["key"]] = value
+    d = _compute_score(conn, hadm_id, score, provided)
+    missing = (d.get("components") or {}).get("missing") or []
+    if missing:
+        conn.execute("UPDATE score_sessions SET provided = %s, "
+                     "updated_at = now() WHERE hadm_id = %s AND actor = %s",
+                     (json.dumps(provided), hadm_id, actor))
+        text = "Got it. " + _ask(d, missing[0], n_total - len(missing) + 1,
+                                 n_total)
+        return _result(_prefix(conn, hadm_id) + speak_units(text),
+                       {"hadm_id": hadm_id, "question": missing[0].get("key")})
+
+    # Done: speak the score and keep it in the room record, with the
+    # answers and who gave them.
+    conn.execute("DELETE FROM score_sessions WHERE hadm_id = %s AND "
+                 "actor = %s", (hadm_id, actor))
+    text = _final_text(d)
+    R.log_event(conn, hadm_id, "score",
+                {"score": d.get("name"), "total": d.get("total"),
+                 "max": d.get("max_possible"), "risk": d.get("risk"),
+                 "answers": provided}, actor, _open_session(conn, hadm_id))
     return _result(_prefix(conn, hadm_id) + speak_units(text),
                    {"hadm_id": hadm_id, "score": d})
 
@@ -573,7 +740,7 @@ def t_check_reminders(conn, a, actor):
                                 for d in due]})
 
 
-_KIND_SPOKEN = {"log": "logged", "request": "asked the desk for",
+_KIND_SPOKEN = {"score": "score recorded", "log": "logged", "request": "asked the desk for",
                 "request_update": "desk update", "reminder": "reminder set",
                 "reminder_fired": "reminder", "session_start": "room opened",
                 "session_end": "room closed"}
@@ -591,6 +758,10 @@ def _event_line(e):
         what = f"{b.get('item', '')} {b.get('status', '')}"
     elif k in ("reminder", "reminder_fired"):
         what = b.get("text", "")
+    elif k == "score":
+        what = (f"{b.get('score')} {b.get('total')}"
+                + (f" of {b.get('max')}" if b.get("max") else "")
+                + (f", {b.get('risk')} risk" if b.get("risk") else ""))
     else:
         what = ""
     label = _KIND_SPOKEN.get(k, k)
@@ -759,15 +930,23 @@ TOOLS = {
     "get_alerts": (t_get_alerts, False,
         "Alerts from the deterministic rule engine, most severe first.",
         _schema(_P, ["patient"])),
-    "calculate_score": (t_calculate_score, False,
-        "A validated clinical score (PERC, Wells PE, HEART, qSOFA, NEWS2, "
-        "CURB-65, HAS-BLED, CHA2DS2-VASc, KDIGO AKI, shock index, ...). "
-        "If the record can't supply every criterion there is no total; "
-        "ask the clinician the questions and call again with `provided`.",
+    "calculate_score": (t_calculate_score, True,
+        "Start a validated clinical score (HAS-BLED, PERC, Wells PE, HEART, "
+        "qSOFA, NEWS2, CURB-65, CHA2DS2-VASc, KDIGO AKI, shock index, ...). "
+        "If the record can't supply every criterion, the result asks the "
+        "FIRST question: say it exactly, then send the clinician's reply "
+        "to answer_score_question.",
         _schema({**_P, "score_name": {"type": "string"},
                  "provided": {"type": "object",
                               "description": "answers the clinician gave"}},
                 ["patient", "score_name"])),
+    "answer_score_question": (t_answer_score, True,
+        "The clinician's answer to the score question GRUS just asked "
+        "(e.g. 'yes', 'no', a number, or 'cancel'). Returns the next "
+        "question or, after the last one, the final score. Say `text` "
+        "exactly. Use this for ANY reply while a score is in progress.",
+        _schema({**_P, "answer": {"type": "string"}},
+                ["patient", "answer"])),
     "start_room": (t_start_room, True,
         "Open the room for a patient. Entries logged after this belong to "
         "this session.",
@@ -900,7 +1079,8 @@ async def _list_tools(ctx, params):
 # composes its own sentence (adding units, rewording), and what it says
 # is no longer what was checked.
 _SPEAK_ONLY = {"ask_record", "get_alerts", "lab_value", "current_vitals",
-               "calculate_score", "recall", "prepare_handover"}
+               "calculate_score", "answer_score_question", "recall",
+               "prepare_handover"}
 _KEEP_KEYS = {"hadm_id", "source", "sources", "event", "found"}
 
 

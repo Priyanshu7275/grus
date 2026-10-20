@@ -73,7 +73,7 @@ class ScoreResult:
                            "points": i.points,
                            "source": f"{i.source['table']}#{i.source['id']}"
                            if i.source else None} for i in self.found],
-                "missing": [{"label": i.label, "ask": i.ask,
+                "missing": [{"key": i.key, "label": i.label, "ask": i.ask,
                              "why": "not recorded in the structured data"}
                             for i in self.missing],
             },
@@ -284,7 +284,7 @@ class ScoreEngine:
     # -----------------------------------------------------------
     # Resolve one input
     # -----------------------------------------------------------
-    def _resolve_input(self, spec, provided):
+    def _resolve_input(self, spec, provided, stype=None):
         key = spec["key"]
         label = spec["label"]
         kind = spec["kind"]
@@ -325,16 +325,36 @@ class ScoreEngine:
                                   pts or 0, srcs[0] if srcs else None)
             has, src, title = self._has_diagnosis(
                 spec.get("codes_9"), spec.get("codes_10"))
-            return InputValue(key, label, kind, True,
-                              title if has else "not coded",
-                              spec.get("points", 0) if has else 0, src)
+            if has:
+                return InputValue(key, label, kind, True, title,
+                                  spec.get("points", 0), src)
+            # A diagnosis that is not coded is NOT a diagnosis that is
+            # absent. Codes are incomplete and history from other
+            # hospitals is not here. Scoring it as 0 would quietly lower
+            # the score (and could "rule out" on a rule-out score), so the
+            # clinician is asked instead, exactly as for exam findings.
+            return InputValue(key, label, kind, False,
+                              ask=spec.get("ask") or
+                              f"{label}? (Not found in the coded diagnoses, "
+                              f"which can be incomplete.)")
 
         if kind == "med":
             has, src, drug = self._has_med(spec.get("drug_class"),
                                            spec.get("drugs"))
+            if has:
+                return InputValue(key, label, kind, True, drug,
+                                  spec.get("points", 0), src)
+            # The pharmacy record covers what was given THIS admission, so
+            # "none prescribed" is a real finding for most scores. For a
+            # rule-out score it is not enough (home medication, e.g.
+            # hormones, is not in it): ask.
+            if stype == "rule_out":
+                return InputValue(key, label, kind, False,
+                                  ask=spec.get("ask") or
+                                  f"{label}? (None prescribed this admission; "
+                                  f"home medication is not in the record.)")
             return InputValue(key, label, kind, True,
-                              drug if has else "not prescribed",
-                              spec.get("points", 0) if has else 0, src)
+                              "none prescribed this admission", 0, None)
 
         # clinical — examination or history. Never in the record.
         return InputValue(key, label, kind, False,
@@ -437,7 +457,7 @@ class ScoreEngine:
 
         found, missing, sources = [], [], []
         for inp in spec["inputs"]:
-            v = self._resolve_input(inp, provided)
+            v = self._resolve_input(inp, provided, spec.get("type"))
             if v.found:
                 found.append(v)
                 if v.source and v.source not in sources:
