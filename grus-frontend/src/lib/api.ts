@@ -5,6 +5,8 @@ import {
   BriefResult,
   ChatMessage,
   ChatResponse,
+  DeskRequest,
+  DueReminder,
   GovernanceResponse,
   HistoryResponse,
   NewAdmissionBody,
@@ -12,6 +14,9 @@ import {
   PipelineStatus,
   QuestionsResponse,
   RiskResponse,
+  RoomReminder,
+  RoomTimeline,
+  RoomVerify,
   ScoreResult,
   ScoresListResponse,
   SourceResponse,
@@ -284,6 +289,46 @@ export const api = {
       () => request<GovernanceResponse>(`/governance`),
       () => demo.demoGovernance()
     );
+  },
+
+  // ---- GRUS Room + desk (live data only: no demo fallback, so the
+  // screen never shows a made-up record) ----
+  getShortId(hadmId: number) {
+    return request<{ hadm_id: number; short_id: string | null }>(`/patients/${hadmId}/short-id`);
+  },
+
+  roomTimeline(hadmId: number, afterSeq = 0) {
+    return request<RoomTimeline>(`/room/${hadmId}/timeline${qs({ after_seq: afterSeq })}`);
+  },
+
+  roomVerify(hadmId: number) {
+    return request<RoomVerify>(`/room/${hadmId}/verify`);
+  },
+
+  roomReminders(hadmId: number) {
+    return request<{ hadm_id: number; reminders: RoomReminder[] }>(`/room/${hadmId}/reminders`);
+  },
+
+  roomLog(hadmId: number, text: string, actor = "web") {
+    return request<{ hadm_id: number; seq: number; tag: string; clock: string }>(`/room/${hadmId}/log`, {
+      method: "POST",
+      body: JSON.stringify({ text, actor }),
+    });
+  },
+
+  deskRequests(hadmId?: number) {
+    return request<{ count: number; requests: DeskRequest[] }>(`/desk/requests${qs({ hadm_id: hadmId })}`);
+  },
+
+  deskUpdate(requestId: number, status: "acknowledged" | "done" | "cancelled", actor = "desk") {
+    return request<{ request_id: number; status: string; seq: number; clock: string }>(
+      `/desk/requests/${requestId}`,
+      { method: "POST", body: JSON.stringify({ status, actor }) }
+    );
+  },
+
+  deskCheckReminders() {
+    return request<{ due: DueReminder[] }>(`/desk/reminders/check`, { method: "POST" });
   },
 
   health() {

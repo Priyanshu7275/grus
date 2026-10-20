@@ -16,7 +16,12 @@ export function PatientCard({ patient }: { patient: PatientCardType }) {
           <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${c.dot}`} />
           <span className={`font-mono text-[11px] uppercase tracking-wide ${c.text}`}>{patient.risk_level}</span>
         </div>
-        <span className="font-mono text-[11px] text-ink-400">#{patient.hadm_id}</span>
+        <span className="text-right font-mono leading-tight">
+          <span className="block text-sm font-semibold text-ink-900" title="Say this number to Alexa">
+            {patient.short_id || String(patient.hadm_id).slice(-4)}
+          </span>
+          <span className="block text-[10px] text-ink-400">#{patient.hadm_id}</span>
+        </span>
       </div>
 
       <p className="mt-3 text-sm leading-snug text-ink-900 line-clamp-2">{patient.headline || "No headline yet"}</p>

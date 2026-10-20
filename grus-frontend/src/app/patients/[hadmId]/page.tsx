@@ -15,6 +15,7 @@ import { TimelineSlider } from "@/components/TimelineSlider";
 import { RiskPanel } from "@/components/RiskPanel";
 import { ScoresPanel } from "@/components/ScoresPanel";
 import { VitalsMiniChart, DerivedMiniChart } from "@/components/VitalsChart";
+import { VoicePanel } from "@/components/VoicePanel";
 
 const MAX_TIMELINE_HOURS = 168;
 
@@ -41,6 +42,16 @@ export default function BriefPage() {
   const [riskLoading, setRiskLoading] = useState(true);
 
   const [vitals, setVitals] = useState<VitalsResponse | null>(null);
+  const [shortId, setShortId] = useState<string>(String(hadmId).slice(-4));
+
+  // The number a doctor says to Alexa ("patient 5843").
+  useEffect(() => {
+    if (!hadmId) return;
+    api
+      .getShortId(hadmId)
+      .then((r) => r.short_id && setShortId(r.short_id))
+      .catch(() => {});
+  }, [hadmId]);
 
   // Fast alerts fetch — used for instant feedback while dragging the slider.
   const fetchAlerts = useCallback(
@@ -133,10 +144,19 @@ export default function BriefPage() {
             <span className="font-mono">hadm #{hadmId}</span>
           </div>
           <h1 className="mt-1 text-lg font-semibold text-ink-900">
+            <span className="mr-2 rounded-md bg-ink-900 px-2 py-0.5 font-mono text-sm text-white" title="Say this number to Alexa">
+              {shortId}
+            </span>
             {headlineFromQuery || "Patient brief"}
           </h1>
         </div>
         <div className="flex items-center gap-2">
+          <Link
+            href={`/patients/${hadmId}/room`}
+            className="rounded border border-ink-900/10 bg-white/70 px-3 py-1.5 text-xs font-medium text-ink-900 hover:border-ink-900/20"
+          >
+            Room record
+          </Link>
           {subjectId && (
             <button
               onClick={() => router.push(`/patients/history/${subjectId}`)}
@@ -209,6 +229,8 @@ export default function BriefPage() {
 
         {/* Side column */}
         <div className="space-y-4">
+          <VoicePanel patientShortId={shortId} />
+
           <RiskPanel risk={risk} loading={riskLoading} />
 
           {hadmId ? <ScoresPanel hadmId={hadmId} asOfHours={committedHours} /> : null}

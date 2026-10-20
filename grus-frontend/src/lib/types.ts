@@ -31,6 +31,8 @@ export interface PatientCard {
   headline: string;
   prior_admissions: number;
   status?: string;
+  /** Fewest trailing digits (4+) that pick this patient out, e.g. "5843". Said to Alexa. */
+  short_id?: string;
 }
 
 export interface PatientsResponse {
@@ -350,6 +352,68 @@ export interface GovernanceResponse {
   registry_error?: string;
   policy?: string;
   note?: string;
+}
+
+// -------------------- room + desk --------------------
+export interface RoomEvent {
+  seq: number;
+  event_id: number;
+  tag: string;
+  kind: string;
+  actor: string;
+  at: string;
+  clock: string;
+  text: string;
+  body: Record<string, unknown>;
+}
+
+export interface RoomTimeline {
+  hadm_id: number;
+  short_id: string;
+  room_open: boolean;
+  session: { session_id: number; room: string; started_by: string; started_at: string } | null;
+  events: RoomEvent[];
+  last_seq: number;
+}
+
+export interface RoomVerify {
+  hadm_id: number;
+  ok: boolean;
+  events: number;
+  broken_at: number | null;
+  reason: string | null;
+  message: string;
+}
+
+export interface RoomReminder {
+  reminder_id: number;
+  text: string;
+  due_at: string;
+  due_clock: string;
+  status: "pending" | "fired";
+  created_by: string;
+  is_due: boolean;
+}
+
+export interface DeskRequest {
+  request_id: number;
+  hadm_id: number;
+  short_id: string;
+  item: string;
+  priority: "stat" | "urgent" | "routine" | string;
+  status: "open" | "acknowledged";
+  requested_by: string;
+  requested_at: string;
+  requested_clock: string;
+}
+
+export interface DueReminder {
+  reminder_id: number;
+  hadm_id: number;
+  short_id: string;
+  text: string;
+  due_at: string;
+  due_clock: string;
 }
 
 // -------------------- errors --------------------

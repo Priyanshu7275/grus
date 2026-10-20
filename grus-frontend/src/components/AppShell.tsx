@@ -70,8 +70,8 @@ function Navbar({ authed }: { authed: boolean }) {
             <NavLink href="/patients" active={pathname?.startsWith("/patients") ?? false}>
               Patients
             </NavLink>
-            <NavLink href="/governance" active={pathname?.startsWith("/governance") ?? false}>
-              Governance
+            <NavLink href="/desk" active={pathname?.startsWith("/desk") ?? false}>
+              Desk
             </NavLink>
           </nav>
 
