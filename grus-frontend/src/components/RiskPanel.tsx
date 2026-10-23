@@ -1,11 +1,12 @@
+import { Brain } from "lucide-react";
 import { RiskPrediction, RiskResponse } from "@/lib/types";
 import { formatPct } from "@/lib/format";
 
 export function RiskPanel({ risk, loading }: { risk: RiskResponse | null; loading: boolean }) {
   if (loading) {
     return (
-      <div className="rounded-lg glass px-4 py-4">
-        <p className="mb-2 font-mono text-[11px] uppercase tracking-wide text-ink-500">Model predictions</p>
+      <div className="card px-5 py-5">
+        <PanelHead>Model predictions</PanelHead>
         <div className="space-y-2 animate-pulse">
           <div className="h-4 w-2/3 rounded bg-ink-900/5" />
           <div className="h-4 w-1/2 rounded bg-ink-900/5" />
@@ -19,8 +20,8 @@ export function RiskPanel({ risk, loading }: { risk: RiskResponse | null; loadin
 
   if (!risk || !risk.available) {
     return (
-      <div className="rounded-lg border border-sev-unknown/40 bg-sev-unknownBg px-4 py-4">
-        <p className="mb-1 font-mono text-[11px] uppercase tracking-wide text-sev-unknown">Model predictions — unavailable</p>
+      <div className="rounded-2xl border border-sev-unknown/40 bg-sev-unknownBg px-5 py-5">
+        <p className="section-label mb-1 text-sev-unknown">Model predictions — unavailable</p>
         <p className="text-base text-ink-700">
           {risk?.reason || "Too little data to score. This is not low risk — it means the model could not assess this patient."}
         </p>
@@ -29,9 +30,9 @@ export function RiskPanel({ risk, loading }: { risk: RiskResponse | null; loadin
   }
 
   return (
-    <div className="rounded-lg glass px-4 py-4">
+    <div className="card px-5 py-5">
       <div className="mb-1 flex items-center justify-between">
-        <p className="font-mono text-[11px] uppercase tracking-wide text-ink-500">Model predictions</p>
+        <PanelHead>Model predictions</PanelHead>
         {risk.scored_at_hour !== undefined && (
           <span className="font-mono text-[11px] text-ink-400">scored at {risk.scored_at_hour}h</span>
         )}
@@ -88,5 +89,14 @@ function PredictionRow({ p }: { p: RiskPrediction }) {
         <p className="mt-1.5 text-[11px] italic text-ink-400">{p.model_performance.note}</p>
       )}
     </div>
+  );
+}
+
+function PanelHead({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="section-label flex items-center gap-1.5">
+      <Brain className="h-3.5 w-3.5 text-brand-deep" />
+      {children}
+    </p>
   );
 }

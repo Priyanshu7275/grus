@@ -9,8 +9,8 @@ export function TrustStrip({ trust, generationMs, cached }: { trust?: TrustBlock
   const abstained = trust.claims_abstained;
 
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-sev-ok/30 bg-sev-okBg px-4 py-2.5 font-mono text-xs text-sev-ok">
-      {pct !== undefined && <span className="font-semibold">{formatPct(pct)} traceable</span>}
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-2xl border border-brand-mid/15 bg-leaf-soft px-4 py-2.5 text-xs font-medium text-brand-deep">
+      {pct !== undefined && <span className="rounded-full bg-white px-2.5 py-1 font-bold text-sev-ok">{formatPct(pct)} traceable</span>}
       {sourced !== undefined && <span>{sourced} sourced</span>}
       {!!invalid && <span className="text-sev-critical">{invalid} unverified</span>}
       {abstained !== undefined && <span className="text-ink-500">{abstained} abstained</span>}

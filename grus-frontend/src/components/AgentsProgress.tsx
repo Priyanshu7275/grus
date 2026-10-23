@@ -31,8 +31,8 @@ export function AgentsProgress({ agentsRun }: { agentsRun?: string[] }) {
   }, [done]);
 
   return (
-    <div className="rounded-lg glass px-4 py-4">
-      <p className="mb-3 font-mono text-[11px] uppercase tracking-wide text-ink-500">
+    <div className="card px-6 py-5">
+      <p className="section-label mb-3">
         {done ? "Agent graph complete" : "Generating brief — 5 agents running"}
       </p>
       <ol className="space-y-2">

@@ -45,8 +45,8 @@ export function ScoresPanel({ hadmId, asOfHours }: { hadmId: number; asOfHours: 
 
   if (listError) {
     return (
-      <div className="rounded-lg border border-sev-unknown/40 bg-sev-unknownBg px-4 py-4">
-        <p className="mb-1 font-mono text-[11px] uppercase tracking-wide text-sev-unknown">Clinical scores — unavailable</p>
+      <div className="rounded-2xl border border-sev-unknown/40 bg-sev-unknownBg px-5 py-5">
+        <p className="section-label mb-1 text-sev-unknown">Clinical scores — unavailable</p>
         <p className="text-base text-ink-700">{listError}</p>
       </div>
     );
@@ -54,8 +54,8 @@ export function ScoresPanel({ hadmId, asOfHours }: { hadmId: number; asOfHours: 
 
   if (!list) {
     return (
-      <div className="rounded-lg glass px-4 py-4">
-        <p className="mb-2 font-mono text-[11px] uppercase tracking-wide text-ink-500">Clinical scores</p>
+      <div className="card px-5 py-5">
+        <p className="section-label mb-2">Clinical scores</p>
         <div className="space-y-2 animate-pulse">
           <div className="h-4 w-3/4 rounded bg-ink-900/5" />
           <div className="h-4 w-1/2 rounded bg-ink-900/5" />
@@ -68,10 +68,10 @@ export function ScoresPanel({ hadmId, asOfHours }: { hadmId: number; asOfHours: 
   const rest = list.all_available.filter((s) => !suggestedKeys.has(s.key));
 
   return (
-    <div className="rounded-lg glass px-4 py-4">
-      <div className="mb-1 flex items-center gap-1.5">
+    <div className="card px-5 py-5">
+      <div className="mb-1.5 flex items-center gap-1.5">
         <Gauge className="h-3.5 w-3.5 text-brand-deep" />
-        <p className="font-mono text-[11px] uppercase tracking-wide text-ink-500">Clinical scores</p>
+        <p className="section-label">Clinical scores</p>
       </div>
       <p className="mb-3 text-sm text-ink-700">
         Validated decision rules. GRUS never calculates one from a guess — every score is arithmetic

@@ -89,7 +89,7 @@ export default function LoginPage() {
         className="absolute inset-0"
         style={{
           background:
-            "linear-gradient(135deg, rgba(10,30,45,0.82), rgba(14,40,55,0.72) 50%, rgba(20,108,140,0.66))",
+            "linear-gradient(135deg, rgba(13,17,64,0.86), rgba(19,25,92,0.74) 50%, rgba(61,107,230,0.55))",
         }}
       />
 
@@ -99,7 +99,7 @@ export default function LoginPage() {
         transition={{ duration: 0.5, ease: "easeOut" }}
         className="relative z-10 w-full max-w-md"
       >
-        <div className="rounded-3xl glass p-8 shadow-lift">
+        <div className="rounded-[2rem] bg-white p-9 shadow-lift">
           <Link href="/" className="flex justify-center">
             <GrusLogo />
           </Link>
@@ -114,7 +114,7 @@ export default function LoginPage() {
                     className={[
                       "flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold transition",
                       done
-                        ? "brand-gradient text-white"
+                        ? "bg-brand-ink text-white"
                         : active
                         ? "border-2 border-brand-mid text-brand-deep"
                         : "border border-ink-900/15 text-ink-400",
@@ -241,8 +241,8 @@ function StepShell({
         <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-brand-mid/10 text-brand-deep">
           {icon}
         </div>
-        <h1 className="text-lg font-bold text-ink-900">{title}</h1>
-        <p className="mt-1 text-base text-ink-700">{subtitle}</p>
+        <h1 className="text-xl font-bold text-brand-ink">{title}</h1>
+        <p className="mt-1 text-sm text-ink-500">{subtitle}</p>
       </div>
       <div className="space-y-4">{children}</div>
     </motion.div>
@@ -263,7 +263,7 @@ function SubmitButton({ busy, onClick, label }: { busy: boolean; onClick: () => 
     <button
       onClick={onClick}
       disabled={busy}
-      className="flex w-full items-center justify-center gap-2 rounded-xl brand-gradient py-2.5 text-sm font-semibold text-white shadow-soft transition hover:shadow-glow disabled:opacity-70"
+      className="flex w-full items-center justify-center gap-2 rounded-full bg-brand-ink py-3 text-sm font-semibold text-white shadow-soft transition hover:bg-brand-deep disabled:opacity-70"
     >
       {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
       {busy ? "Verifying…" : label}

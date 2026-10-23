@@ -15,11 +15,14 @@ import { TimelineSlider } from "@/components/TimelineSlider";
 import { RiskPanel } from "@/components/RiskPanel";
 import { ScoresPanel } from "@/components/ScoresPanel";
 import { VitalsMiniChart, DerivedMiniChart } from "@/components/VitalsChart";
-import { VoicePanel } from "@/components/VoicePanel";
+import { VoiceWidget } from "@/components/VoiceWidget";
+import { PatientDashboard } from "@/components/PatientDashboard";
+import { ArrowUpRight, FileText, History } from "lucide-react";
 
 const MAX_TIMELINE_HOURS = 168;
 
 export default function BriefPage() {
+
   const params = useParams<{ hadmId: string }>();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -133,42 +136,53 @@ export default function BriefPage() {
   const isDegraded = brief && brief.degraded === true;
 
   return (
-    <div className="mx-auto max-w-[1400px] px-4 py-6">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <div className="mx-auto max-w-[1400px] px-4 py-7 sm:px-6">
+      {/* Header */}
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 text-xs text-ink-400">
-            <Link href="/patients" className="hover:text-ink-500">
+            <Link href="/patients" className="transition hover:text-brand-deep">
               Patients
             </Link>
             <span>/</span>
-            <span className="font-mono">hadm #{hadmId}</span>
+            <span>Admission {hadmId}</span>
           </div>
-          <h1 className="mt-1 text-lg font-semibold text-ink-900">
-            <span className="mr-2 rounded-md bg-ink-900 px-2 py-0.5 font-mono text-sm text-white" title="Say this number to Alexa">
-              {shortId}
-            </span>
-            {headlineFromQuery || "Patient brief"}
-          </h1>
+          <div className="mt-3 flex items-center gap-4">
+            <div
+              className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-2xl bg-brand-ink text-white shadow-lift"
+              title="Say this number to Alexa"
+            >
+              <span className="text-[9px] font-semibold uppercase tracking-wider text-white/60">ID</span>
+              <span className="text-lg font-extrabold leading-none">{shortId}</span>
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-ink-900 sm:text-[1.75rem]">{headlineFromQuery || "Patient brief"}</h1>
+              <p className="text-sm text-ink-500">
+                Say <span className="font-semibold text-ink-700">&ldquo;patient {shortId}&rdquo;</span> to Alexa to ask about this patient
+              </p>
+            </div>
+          </div>
         </div>
         <div className="flex items-center gap-2">
-          <Link
-            href={`/patients/${hadmId}/room`}
-            className="rounded border border-ink-900/10 bg-white/70 px-3 py-1.5 text-xs font-medium text-ink-900 hover:border-ink-900/20"
-          >
-            Room record
-          </Link>
           {subjectId && (
             <button
               onClick={() => router.push(`/patients/history/${subjectId}`)}
-              className="rounded border border-ink-900/10 px-3 py-1.5 text-xs text-ink-500 hover:text-ink-900 hover:border-ink-900/15"
+              className="inline-flex items-center gap-2 rounded-full border border-ink-900/10 bg-white px-4 py-2.5 text-sm font-semibold text-ink-700 transition hover:border-ink-900/25"
             >
+              <History className="h-4 w-4" />
               View history
             </button>
           )}
+          <Link href={`/patients/${hadmId}/room`} className="pill-btn bg-brand-ink text-white shadow-soft">
+            Room record
+            <span className="pill-arrow bg-white text-brand-ink">
+              <ArrowUpRight className="h-4 w-4" />
+            </span>
+          </Link>
         </div>
       </div>
 
-      <div className="mb-4">
+      <div className="mb-5">
         <TimelineSlider
           maxHours={MAX_TIMELINE_HOURS}
           committedHours={committedHours}
@@ -177,24 +191,27 @@ export default function BriefPage() {
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_340px]">
-        {/* Main column */}
+      {/* Vitals dashboard */}
+      <div className="mb-6">
+        {vitals && vitals.series.length === 0 && vitals.derived.length === 0 ? (
+          <p className="rounded-2xl border border-sev-unknown/40 bg-sev-unknownBg px-5 py-4 text-sm text-sev-unknown">
+            {vitals.sampling_note || "No vitals recorded for this window."}
+          </p>
+        ) : (
+          <PatientDashboard vitals={vitals} />
+        )}
+        {vitals?.sampling_note && vitals.series.length > 0 && (
+          <p className="mt-2 text-[11px] text-ink-400">{vitals.sampling_note}</p>
+        )}
+      </div>
+
+      {/* Brief + Talk to GRUS */}
+      <div>
         <div className="space-y-4">
           {briefLoading && <AgentsProgress agentsRun={brief && !brief.degraded ? brief.agents_run : undefined} />}
 
-          {!briefLoading && alerts && (
-            <div className="rounded-lg glass px-4 py-3">
-              <div className="mb-2 flex items-center justify-between">
-                <p className="font-mono text-[11px] uppercase tracking-wide text-ink-500">
-                  Rule-engine alerts (instant)
-                </p>
-                <CountsRow counts={alerts.counts} />
-              </div>
-            </div>
-          )}
-
           {briefError && !isDegraded && (
-            <div className="rounded-lg border border-sev-critical/40 bg-sev-criticalBg px-4 py-3 text-sm text-sev-critical">
+            <div className="rounded-2xl border border-sev-critical/40 bg-sev-criticalBg px-5 py-4 text-sm text-sev-critical">
               {briefError}
               {alerts && (
                 <div className="mt-3">
@@ -209,7 +226,7 @@ export default function BriefPage() {
 
           {isDegraded && brief && brief.degraded && (
             <div className="space-y-3">
-              <div className="rounded-lg border border-sev-warning/40 bg-sev-warningBg px-4 py-3 text-sm text-sev-warning">
+              <div className="rounded-2xl border border-sev-warning/40 bg-sev-warningBg px-5 py-4 text-sm text-sev-warning">
                 Agent graph unavailable — showing rule engine output only. {brief.message}
               </div>
               <AlertsList alerts={brief.alerts} />
@@ -217,57 +234,79 @@ export default function BriefPage() {
           )}
 
           {!briefLoading && parsedBrief && brief && !brief.degraded && (
-            <div className="space-y-4">
-              <TrustStrip trust={brief.trust} generationMs={brief.generation_ms} cached={brief.cached} />
-              <div className="rounded-lg glass px-5 py-5">
+            <div className="card overflow-hidden">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-900/[0.06] px-6 py-4">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-brand-mid/15 bg-leaf-soft text-brand-deep">
+                    <FileText className="h-[18px] w-[18px]" />
+                  </span>
+                  <div>
+                    <p className="text-[15px] font-bold text-ink-900">Clinical brief</p>
+                    <p className="text-xs text-ink-400">Every claim links to the chart row it came from</p>
+                  </div>
+                </div>
+                {alerts && <CountsRow counts={alerts.counts} />}
+              </div>
+              <div className="px-6 pt-4">
+                <TrustStrip trust={brief.trust} generationMs={brief.generation_ms} cached={brief.cached} />
+              </div>
+              <div className="px-6 py-6">
                 <BriefRenderer parsed={parsedBrief} />
               </div>
-              {brief.disclaimer && <p className="text-center text-[11px] text-ink-400">{brief.disclaimer}</p>}
+              {brief.disclaimer && (
+                <p className="border-t border-ink-900/[0.06] px-6 py-3 text-[11px] text-ink-400">{brief.disclaimer}</p>
+              )}
+            </div>
+          )}
+
+          {!briefLoading && !parsedBrief && !briefError && !isDegraded && alerts && (
+            <div className="card px-5 py-3.5">
+              <div className="flex items-center justify-between">
+                <p className="section-label">Rule-engine alerts · instant</p>
+                <CountsRow counts={alerts.counts} />
+              </div>
             </div>
           )}
         </div>
 
-        {/* Side column */}
-        <div className="space-y-4">
-          <VoicePanel patientShortId={shortId} />
+             </div>
 
-          <RiskPanel risk={risk} loading={riskLoading} />
+      <VoiceWidget patientShortId={shortId} />
 
-          {hadmId ? <ScoresPanel hadmId={hadmId} asOfHours={committedHours} /> : null}
+      {/* Predictions + scores */}
+      <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-2">
+        <RiskPanel risk={risk} loading={riskLoading} />
+        {hadmId ? <ScoresPanel hadmId={hadmId} asOfHours={committedHours} /> : null}
+      </div>
 
-          <div>
-            <p className="mb-2 font-mono text-[11px] uppercase tracking-wide text-ink-500">Vitals</p>
-            {!vitals && <div className="h-24 animate-pulse rounded-lg bg-white/70" />}
-            {vitals && vitals.series.length === 0 && (
-              <p className="rounded-lg border border-sev-unknown/40 bg-sev-unknownBg px-3 py-3 text-xs text-sev-unknown">
-                {vitals.sampling_note || "No vitals recorded for this window."}
-              </p>
-            )}
-            <div className="space-y-2">
-              {vitals?.series.map((s) => (
-                <VitalsMiniChart key={s.code} series={s} />
-              ))}
-              {vitals?.derived.map((s) => (
-                <DerivedMiniChart key={s.code} series={s} />
-              ))}
-            </div>
-            {vitals?.sampling_note && vitals.series.length > 0 && (
-              <p className="mt-2 text-[11px] text-ink-400">{vitals.sampling_note}</p>
-            )}
+      {/* All vital-sign charts */}
+      {vitals && (vitals.series.length > 0 || vitals.derived.length > 0) && (
+        <div className="mt-8">
+          <div className="mb-3">
+            <p className="text-lg font-bold text-ink-900">All vital signs</p>
+            <p className="text-xs text-ink-400">Every series on the chart, with the normal range shaded</p>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {vitals.derived.map((s) => (
+              <DerivedMiniChart key={s.code} series={s} />
+            ))}
+            {vitals.series.map((s) => (
+              <VitalsMiniChart key={s.code} series={s} />
+            ))}
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
 
 function CountsRow({ counts }: { counts: { critical: number; warning: number; unknown: number; info: number } }) {
   return (
-    <div className="flex items-center gap-3 font-mono text-[11px]">
-      <span className="text-sev-critical">{counts.critical} critical</span>
-      <span className="text-sev-warning">{counts.warning} warning</span>
-      <span className="text-sev-unknown">{counts.unknown} unknown</span>
-      <span className="text-sev-info">{counts.info} info</span>
+    <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-semibold">
+      <span className="rounded-full bg-sev-criticalBg px-2.5 py-1 text-sev-critical">{counts.critical} critical</span>
+      <span className="rounded-full bg-sev-warningBg px-2.5 py-1 text-[#a16207]">{counts.warning} warning</span>
+      <span className="rounded-full bg-sev-unknownBg px-2.5 py-1 text-sev-unknown">{counts.unknown} unknown</span>
+      <span className="rounded-full bg-sev-infoBg px-2.5 py-1 text-sev-info">{counts.info} info</span>
     </div>
   );
 }

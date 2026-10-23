@@ -60,13 +60,13 @@ function Navbar({ authed }: { authed: boolean }) {
 
   return (
     <header className="sticky top-0 z-40 w-full">
-      <div className="glass border-b border-ink-900/5">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
+      <div className="border-b border-ink-900/5 bg-white/80 backdrop-blur-md">
+        <div className="mx-auto flex h-16 max-w-[1400px] items-center justify-between px-4 sm:px-6">
           <Link href="/patients" aria-label="GRUS home">
             <GrusLogo />
           </Link>
 
-          <nav className="hidden items-center gap-1 sm:flex">
+          <nav className="hidden items-center gap-1 rounded-full border border-ink-900/[0.06] bg-[#F3F4FA] p-1 sm:flex">
             <NavLink href="/patients" active={pathname?.startsWith("/patients") ?? false}>
               Patients
             </NavLink>
@@ -82,7 +82,7 @@ function Navbar({ authed }: { authed: boolean }) {
                   logout();
                   router.push("/login");
                 }}
-                className="inline-flex items-center gap-1.5 rounded-full border border-ink-900/10 px-4 py-2 text-sm font-medium text-ink-700 transition hover:bg-ink-900/5"
+                className="inline-flex items-center gap-1.5 rounded-full border border-ink-900/10 bg-white px-4 py-2 text-sm font-medium text-ink-700 transition hover:border-ink-900/20"
               >
                 <LogOut className="h-4 w-4" />
                 Sign out
@@ -108,8 +108,8 @@ function NavLink({ href, active, children }: { href: string; active: boolean; ch
     <Link
       href={href}
       className={cn(
-        "rounded-full px-3.5 py-1.5 text-sm font-medium transition",
-        active ? "bg-ink-900/5 text-ink-900" : "text-ink-500 hover:text-ink-900"
+        "rounded-full px-5 py-2 text-sm font-semibold transition",
+        active ? "bg-brand-ink text-white shadow-soft" : "text-ink-500 hover:text-ink-900"
       )}
     >
       {children}

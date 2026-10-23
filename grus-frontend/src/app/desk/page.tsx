@@ -107,11 +107,11 @@ export default function DeskPage() {
   };
 
   return (
-    <div className="mx-auto max-w-[1000px] px-4 py-6">
-      <div className="mb-4 flex items-center justify-between">
+    <div className="mx-auto max-w-[1100px] px-4 py-8">
+      <div className="mb-6 flex items-end justify-between">
         <div>
-          <h1 className="text-lg font-semibold text-ink-900">Desk</h1>
-          <p className="text-xs text-ink-400">Requests from rooms, live. Stat first, then oldest first.</p>
+          <h1 className="text-3xl font-bold text-ink-900 sm:text-[2.4rem]">Main <span className="accent-serif text-[1.15em] text-brand-deep">desk</span></h1>
+          <p className="mt-1 text-sm text-ink-500">Requests from rooms, live. Stat first, then oldest first.</p>
         </div>
         <button
           onClick={() => setSoundOn((s) => !s)}
@@ -158,16 +158,16 @@ export default function DeskPage() {
       {requests === null && !error && <div className="h-24 animate-pulse rounded-lg bg-white/70" />}
 
       {requests && requests.length === 0 && (
-        <div className="rounded-lg glass px-4 py-10 text-center text-sm text-ink-400">
+        <div className="card px-4 py-10 text-center text-sm text-ink-400">
           No open requests. Try &ldquo;Alexa, ask grus assistant to ask the desk for a crossmatch for patient 5843&rdquo;.
         </div>
       )}
 
       <div className="space-y-2">
         {requests?.map((q) => (
-          <div key={q.request_id} className="flex flex-wrap items-center gap-3 rounded-lg glass px-4 py-3">
+          <div key={q.request_id} className="flex flex-wrap items-center gap-3 card px-5 py-4">
             <span
-              className={`w-16 shrink-0 rounded px-2 py-0.5 text-center text-[11px] font-semibold uppercase ${
+              className={`w-16 shrink-0 rounded-full px-2 py-1 text-center text-[10px] font-bold uppercase tracking-wider ${
                 PRIORITY[q.priority] || PRIORITY.routine
               }`}
             >
@@ -175,7 +175,7 @@ export default function DeskPage() {
             </span>
             <Link
               href={`/patients/${q.hadm_id}/room`}
-              className="shrink-0 rounded-md bg-ink-900 px-2 py-0.5 font-mono text-sm text-white"
+              className="shrink-0 rounded-xl bg-brand-ink px-2.5 py-1 text-sm font-extrabold text-white"
               title={`Admission ${q.hadm_id}`}
             >
               {q.short_id}
@@ -192,7 +192,7 @@ export default function DeskPage() {
                 <button
                   disabled={busyId === q.request_id}
                   onClick={() => update(q, "acknowledged")}
-                  className="inline-flex items-center gap-1 rounded border border-ink-900/10 bg-white px-3 py-1.5 text-xs font-medium text-ink-900 hover:border-ink-900/25 disabled:opacity-40"
+                  className="inline-flex items-center gap-1 rounded-full border border-ink-900/10 bg-white px-4 py-2 text-xs font-semibold text-ink-900 hover:border-ink-900/25 disabled:opacity-40"
                 >
                   <Check size={14} /> Acknowledge
                 </button>
@@ -200,7 +200,7 @@ export default function DeskPage() {
               <button
                 disabled={busyId === q.request_id}
                 onClick={() => update(q, "done")}
-                className="inline-flex items-center gap-1 rounded bg-sev-ok px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+                className="inline-flex items-center gap-1 rounded-full bg-sev-ok px-4 py-2 text-xs font-semibold text-white disabled:opacity-40"
               >
                 <CheckCheck size={14} /> Done
               </button>

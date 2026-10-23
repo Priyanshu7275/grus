@@ -115,7 +115,7 @@ export default function RoomPage() {
   const shortId = room?.short_id || String(hadmId).slice(-4);
 
   return (
-    <div className="mx-auto max-w-[1200px] px-4 py-6">
+    <div className="mx-auto max-w-[1300px] px-4 py-8 sm:px-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 text-xs text-ink-400">
@@ -129,9 +129,9 @@ export default function RoomPage() {
             <span>/</span>
             <span>Room</span>
           </div>
-          <h1 className="mt-1 flex items-center gap-2 text-lg font-semibold text-ink-900">
-            <span className="rounded-md bg-ink-900 px-2 py-0.5 font-mono text-sm text-white">{shortId}</span>
-            Room record
+          <h1 className="mt-2 flex flex-wrap items-center gap-3 text-2xl font-bold text-ink-900 sm:text-[2rem]">
+            <span className="num rounded-xl bg-brand-deep px-2.5 py-1 text-base font-bold text-white shadow-soft">{shortId}</span>
+            <span>Room <span className="accent-serif text-[1.15em] text-brand-deep">record</span></span>
             {room && (
               <span
                 className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
@@ -153,7 +153,7 @@ export default function RoomPage() {
       )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_360px]">
-        <div className="rounded-lg glass px-4 py-3">
+        <div className="card px-5 py-4">
           <p className="mb-3 font-mono text-[11px] uppercase tracking-wide text-ink-500">
             Timeline · updates live · {events.length} entr{events.length === 1 ? "y" : "ies"}
           </p>
@@ -214,7 +214,7 @@ export default function RoomPage() {
         <div className="space-y-4">
           <VoicePanel patientShortId={shortId} />
 
-          <div className="rounded-lg glass px-4 py-3">
+          <div className="card px-5 py-4">
             <p className="mb-2 flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wide text-ink-500">
               <Bell size={12} /> Reminders
             </p>

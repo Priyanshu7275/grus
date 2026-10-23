@@ -3,18 +3,27 @@
 @tailwind utilities;
 
 :root {
-  --brand-sky: #7ec8de;
-  --brand-mid: #3aa9c4;
-  --brand-deep: #146c8c;
-  --font-inter: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
-    Arial, sans-serif;
+  --brand-sky: #8fb0ff;
+  --brand-mid: #3d6be6;
+  --brand-deep: #2446b8;
+  --brand-ink: #13195c;
+  --leaf: #3d6be6;
+  --font-inter: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
 }
 
 html,
 body {
-  background-color: #f4fafc;
-  color: #0f1e2b;
+  background-color: #f6f7fb;
+  color: #121a47;
   -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.011em;
+}
+
+h1,
+h2,
+h3 {
+  letter-spacing: -0.02em;
 }
 
 * {
@@ -22,7 +31,7 @@ body {
 }
 
 ::selection {
-  background: #3aa9c440;
+  background: #3d6be640;
 }
 
 ::-webkit-scrollbar {
@@ -30,29 +39,52 @@ body {
   height: 10px;
 }
 ::-webkit-scrollbar-track {
-  background: #f4fafc;
+  background: #f6f7fb;
 }
 ::-webkit-scrollbar-thumb {
-  background: #cfe3ea;
+  background: #cfd5ea;
   border-radius: 6px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #b7d7e0;
 }
 
-/* Soft ambient background wash, sampled-blue tinted */
+/* Soft ambient background wash, mint-tinted */
 .app-bg {
-  background: radial-gradient(1100px 520px at 12% -8%, rgba(126, 200, 222, 0.14), transparent 60%),
-    radial-gradient(900px 480px at 100% 0%, rgba(58, 169, 196, 0.12), transparent 55%),
-    linear-gradient(180deg, #f8fcfd 0%, #f4fafc 100%);
+  background: radial-gradient(1100px 560px at 8% -10%, rgba(143, 176, 255, 0.18), transparent 60%),
+    radial-gradient(900px 500px at 100% -4%, rgba(61, 107, 230, 0.08), transparent 55%),
+    linear-gradient(180deg, #f8f9fd 0%, #f6f7fb 100%);
 }
 
-/* Frosted glass panel */
+/* Clean card — solid white, soft shadow (medical-dashboard look) */
 .glass {
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(14px) saturate(140%);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
-  border: 1px solid rgba(15, 30, 43, 0.06);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(10px) saturate(130%);
+  -webkit-backdrop-filter: blur(10px) saturate(130%);
+  border: 1px solid rgba(19, 25, 92, 0.07);
+}
+
+/* A plain solid card, for dashboard tiles */
+.card {
+  background: #ffffff;
+  border: 1px solid rgba(19, 25, 92, 0.08);
+  border-radius: 1.25rem;
+  box-shadow: 0 1px 2px rgba(19, 25, 92, 0.04), 0 10px 30px rgba(19, 25, 92, 0.05);
+}
+.card-hover {
+  transition: box-shadow 0.18s, transform 0.18s, border-color 0.18s;
+}
+.card-hover:hover {
+  box-shadow: 0 2px 6px rgba(19, 25, 92, 0.06), 0 18px 44px rgba(19, 25, 92, 0.10);
+  border-color: rgba(61, 107, 230, 0.28);
+  transform: translateY(-2px);
+}
+.section-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #5a648c;
 }
 
 .brand-text {
@@ -103,7 +135,7 @@ body {
 
 .field-icon {
   position: absolute;
-  left: 0.75rem;
+  left: 0.95rem;
   top: 50%;
   height: 1rem;
   width: 1rem;
@@ -113,10 +145,10 @@ body {
 }
 .field-input {
   width: 100%;
-  border-radius: 0.75rem;
-  border: 1px solid rgba(15, 30, 43, 0.12);
-  background: rgba(255, 255, 255, 0.75);
-  padding: 0.625rem 0.75rem 0.625rem 2.5rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(19, 25, 92, 0.12);
+  background: #f7f8fc;
+  padding: 0.75rem 1rem 0.75rem 2.6rem;
   font-size: 0.875rem;
   color: #0f1e2b;
   outline: none;
@@ -156,4 +188,48 @@ body {
 }
 .fade-in {
   animation: fade-in 0.18s ease-out;
+}
+
+/* Italic serif accent word inside headings (as on the reference sites) */
+.accent-serif {
+  font-family: "Instrument Serif", ui-serif, Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+/* Arrow-in-circle pill button */
+.pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  border-radius: 9999px;
+  padding: 0.4rem 0.4rem 0.4rem 1.25rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.pill-btn:hover {
+  transform: translateY(-1px);
+}
+.pill-btn .pill-arrow {
+  display: inline-flex;
+  height: 2.1rem;
+  width: 2.1rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+}
+
+/* Scrolling marquee */
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.marquee {
+  animation: marquee 38s linear infinite;
+}
+.outline-text {
+  color: transparent;
+  -webkit-text-stroke: 1.5px rgba(19, 25, 92, 0.22);
 }

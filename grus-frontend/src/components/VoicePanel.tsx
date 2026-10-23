@@ -11,7 +11,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Mic, Send, Volume2, VolumeX } from "lucide-react";
+import { Loader2, Mic, Send, Square, Volume2, VolumeX } from "lucide-react";
 import { api } from "@/lib/api";
 
 type Tool = { name: string; status: string; ms: number | null };
@@ -28,6 +28,21 @@ type TurnReply = {
   elapsed_ms: number;
 };
 
+// On a patient's page, questions are about that patient unless they name
+// another patient's number or ask about all patients.
+const NUM_WORD =
+  "zero|oh|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety";
+const NAMES_A_PATIENT = new RegExp(
+  `\\b\\d{4,}\\b|\\bpatient\\s+(?:ending\\s+(?:in\\s+)?|number\\s+)?(?:\\d|(?:${NUM_WORD})\\b)`,
+  "i"
+);
+const ABOUT_EVERYONE = /\bpatients\b|\bboard\b|\beveryone\b|\bwho needs\b/i;
+
+export function withPatient(text: string, shortId?: string): string {
+  if (!shortId || NAMES_A_PATIENT.test(text) || ABOUT_EVERYONE.test(text)) return text;
+  return `For patient ${shortId}: ${text}`;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const getRecognition = (): any => {
   if (typeof window === "undefined") return null;
@@ -37,7 +52,7 @@ const getRecognition = (): any => {
   return SR ? new SR() : null;
 };
 
-export function VoicePanel({ patientShortId }: { patientShortId?: string }) {
+export function VoicePanel({ patientShortId, bare = false }: { patientShortId?: string; bare?: boolean }) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [listening, setListening] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -95,7 +110,7 @@ export function VoicePanel({ patientShortId }: { patientShortId?: string }) {
     setMsgs((m) => [...m, { who: "you", text: said }]);
     setBusy(true);
     try {
-      let r = await post({ text: said });
+      let r = await post({ text: withPatient(said, patientShortId) });
       // The agent can answer "still working": ask again, as Alexa would.
       for (let i = 0; r.status === "pending" && i < 8; i++) {
         await new Promise((ok) => setTimeout(ok, 2000));
@@ -153,11 +168,13 @@ export function VoicePanel({ patientShortId }: { patientShortId?: string }) {
   };
 
   return (
-    <div className="rounded-lg glass px-4 py-3">
-      <div className="mb-2 flex items-center justify-between">
-        <p className="font-mono text-[11px] uppercase tracking-wide text-ink-500">
-          Talk to GRUS{patientShortId ? ` · patient ${patientShortId}` : ""}
-        </p>
+    <div className={bare ? "flex h-full flex-col px-4 pb-4 pt-3" : "card px-5 py-4"}>
+      <div className={`mb-2 flex items-center ${bare ? "justify-end" : "justify-between"}`}>
+        {!bare && (
+          <p className="section-label">
+            Talk to GRUS{patientShortId ? ` · patient ${patientShortId}` : ""}
+          </p>
+        )}
         <button
           onClick={() => setVoiceOn((v) => !v)}
           className="text-ink-400 hover:text-ink-900"
@@ -167,10 +184,10 @@ export function VoicePanel({ patientShortId }: { patientShortId?: string }) {
         </button>
       </div>
 
-      <div className="max-h-72 space-y-2 overflow-y-auto pr-1 text-sm">
+      <div className={`${bare ? "min-h-0 flex-1" : "max-h-72"} space-y-2 overflow-y-auto pr-1 text-sm`}>
         {msgs.length === 0 && (
           <p className="text-xs text-ink-400">
-            Hold the mic and ask, for example: &ldquo;What was the INR on arrival?&rdquo;, &ldquo;Current
+            Click the mic and ask, for example: &ldquo;What was the INR on arrival?&rdquo;, &ldquo;Current
             vitals&rdquo;, &ldquo;Log: two units O negative started&rdquo;, &ldquo;Give me a handover&rdquo;.
           </p>
         )}
@@ -180,7 +197,7 @@ export function VoicePanel({ patientShortId }: { patientShortId?: string }) {
               {m.text}
             </div>
           ) : m.who === "grus" ? (
-            <div key={i} className="mr-8 rounded-lg border border-teal-500/30 bg-teal-50/60 px-3 py-2 text-ink-900">
+            <div key={i} className="mr-8 rounded-lg border border-brand-mid/25 bg-leaf-soft/70 px-3 py-2 text-ink-900">
               <p>{m.text}</p>
               {m.tools.length > 0 && (
                 <p className="mt-1 font-mono text-[10px] text-ink-400">
@@ -196,28 +213,35 @@ export function VoicePanel({ patientShortId }: { patientShortId?: string }) {
           )
         )}
         {interim && <div className="ml-8 rounded-lg border border-dashed border-ink-900/15 px-3 py-2 text-ink-500">{interim}…</div>}
-        {busy && <p className="text-xs text-ink-400">GRUS is checking the record…</p>}
+        {busy && (
+          <div className="mr-8 flex items-center gap-2 rounded-lg border border-brand-mid/20 bg-leaf-soft/60 px-3 py-2 text-xs text-ink-500">
+            <Loader2 size={14} className="animate-spin text-brand-deep" />
+            GRUS is checking the record…
+          </div>
+        )}
         <div ref={endRef} />
       </div>
 
       <div className="mt-3 flex items-center gap-2">
         {canListen && (
           <button
-            onMouseDown={startListening}
-            onMouseUp={stopListening}
-            onMouseLeave={() => listening && stopListening()}
-            onTouchStart={(e) => {
-              e.preventDefault();
-              startListening();
-            }}
-            onTouchEnd={stopListening}
+            type="button"
+            onClick={() => (listening ? stopListening() : startListening())}
             disabled={busy}
-            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white transition ${
-              listening ? "scale-110 bg-sev-critical" : "bg-teal-600 hover:bg-teal-700"
-            } disabled:opacity-40`}
-            title="Hold to talk"
+            className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white transition ${
+              listening ? "bg-sev-critical" : "bg-brand-deep hover:bg-brand-mid"
+            } disabled:cursor-wait disabled:opacity-60`}
+            title={busy ? "GRUS is answering…" : listening ? "Click to stop and send" : "Click to talk"}
+            aria-label={busy ? "GRUS is answering" : listening ? "Stop and send" : "Start talking"}
           >
-            <Mic size={18} />
+            {listening && <span className="absolute inset-0 animate-ping rounded-full bg-sev-critical opacity-40" />}
+            {busy ? (
+              <Loader2 size={18} className="animate-spin" />
+            ) : listening ? (
+              <Square size={14} className="relative fill-current" />
+            ) : (
+              <Mic size={18} />
+            )}
           </button>
         )}
         <form
@@ -241,7 +265,12 @@ export function VoicePanel({ patientShortId }: { patientShortId?: string }) {
           </button>
         </form>
       </div>
-      {listening && <p className="mt-1 text-[11px] text-sev-critical">Listening… release to send</p>}
+      {listening && (
+        <p className="mt-1 flex items-center gap-1.5 text-[11px] font-medium text-sev-critical">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-sev-critical" />
+          Listening… click the button again to send
+        </p>
+      )}
     </div>
   );
 }

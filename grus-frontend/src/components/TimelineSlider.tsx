@@ -15,9 +15,9 @@ export function TimelineSlider({ maxHours, committedHours, onCommit, onDraftChan
   const isFull = committedHours === null;
 
   return (
-    <div className="rounded-lg glass px-4 py-3">
+    <div className="card px-5 py-4">
       <div className="mb-2 flex items-center justify-between">
-        <span className="font-mono text-[11px] uppercase tracking-wide text-ink-500">Point-in-time view</span>
+        <span className="section-label">Point-in-time view</span>
         <span className="font-mono text-xs text-ink-900">
           {isFull ? "Full record" : `showing only what was known ${formatHours(draft)}`}
         </span>
@@ -38,7 +38,7 @@ export function TimelineSlider({ maxHours, committedHours, onCommit, onDraftChan
           onMouseUp={() => !isFull && onCommit(draft)}
           onTouchEnd={() => !isFull && onCommit(draft)}
           onKeyUp={() => !isFull && onCommit(draft)}
-          className="h-1.5 flex-1 cursor-pointer appearance-none rounded-full bg-ink-900/5 accent-sev-info disabled:opacity-40"
+          className="h-1.5 flex-1 cursor-pointer appearance-none rounded-full bg-ink-900/5 accent-brand-mid disabled:opacity-40"
         />
         <button
           onClick={() => {
@@ -57,7 +57,7 @@ export function TimelineSlider({ maxHours, committedHours, onCommit, onDraftChan
           {isFull ? "Use timeline slider" : "Back to full record"}
         </button>
       </div>
-      <p className="mt-2 text-sm text-ink-700">
+      <p className="mt-2 text-[13px] text-ink-500">
         Dragging re-checks alerts instantly; releasing regenerates the full brief. This is what stops the system
         reading the answer key.
       </p>

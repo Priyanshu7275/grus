@@ -6,24 +6,29 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["var(--font-inter)", "Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+        sans: ["var(--font-inter)", "Plus Jakarta Sans", "ui-sans-serif", "system-ui", "sans-serif"],
+        serif: ["Instrument Serif", "ui-serif", "Georgia", "serif"],
         mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "Menlo", "Consolas", "monospace"],
       },
       colors: {
-        // White base + the sky-blue sampled straight from the mascot video's
-        // background gradient (#78BFD8 .. #85CFDC).
-        canvas: "#F4FAFC",
+        // Clean white base + deep navy and royal blue (medical-site look).
+        canvas: "#F6F7FB",
         surface: "#FFFFFF",
         ink: {
-          900: "#0F1E2B",
-          700: "#33475A",
-          500: "#45566A", // darkened from #64748B — was reading as too light/grey
-          400: "#64748B", // darkened from #94A3B8 — shifted down to the old 500 value
+          900: "#121A47",
+          700: "#343F6B",
+          500: "#5A648C",
+          400: "#7D86A8",
         },
         brand: {
-          sky: "#7EC8DE", // sampled from mascot background
-          mid: "#3AA9C4",
-          deep: "#146C8C", // for buttons / text-on-white contrast
+          sky: "#8FB0FF",
+          mid: "#3D6BE6",
+          deep: "#2446B8", // buttons / text-on-white
+          ink: "#13195C", // dark navy surfaces
+        },
+        leaf: {
+          DEFAULT: "#3D6BE6",
+          soft: "#EEF2FF",
         },
         // Clinical severity — kept red/amber/green so they never get
         // confused with the blue brand chrome around them.
@@ -45,9 +50,9 @@ const config: Config = {
         "3xl": "1.5rem",
       },
       boxShadow: {
-        soft: "0 1px 2px rgba(15,40,60,0.04), 0 8px 24px rgba(15,40,60,0.06)",
-        lift: "0 2px 4px rgba(15,40,60,0.05), 0 18px 40px rgba(15,40,60,0.10)",
-        glow: "0 0 0 1px rgba(58,169,196,0.20), 0 12px 32px rgba(58,169,196,0.20)",
+        soft: "0 1px 2px rgba(19,25,92,0.04), 0 10px 30px rgba(19,25,92,0.06)",
+        lift: "0 2px 6px rgba(19,25,92,0.06), 0 24px 56px rgba(19,25,92,0.12)",
+        glow: "0 0 0 1px rgba(61,107,230,0.22), 0 14px 34px rgba(61,107,230,0.25)",
       },
       keyframes: {
         "fade-up": {

@@ -84,7 +84,7 @@ function BriefSectionView({ section }: { section: BriefSection }) {
   return (
     <section>
       {heading && <SectionHeading>{heading}</SectionHeading>}
-      <div className="space-y-2 text-sm leading-relaxed text-ink-900">
+      <div className="space-y-2 text-[15px] leading-relaxed text-ink-900">
         {section.blocks.map((b, i) => (
           <p key={i}>
             {renderTokens(b.title, `p-${i}`)}
@@ -103,7 +103,7 @@ function BriefSectionView({ section }: { section: BriefSection }) {
 function SectionHeading({ children, urgent }: { children: React.ReactNode; urgent?: boolean }) {
   return (
     <h2
-      className={`mb-2 font-mono text-xs font-semibold uppercase tracking-wider ${
+      className={`mb-2.5 text-[11px] font-bold uppercase tracking-[0.1em] ${
         urgent ? "text-sev-unknown" : "text-ink-500"
       }`}
     >

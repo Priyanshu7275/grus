@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError } from "@/lib/api";
+
 import { useActivePatient } from "@/lib/activePatientContext";
 import { ChatMessage } from "@/lib/types";
 import { Citation } from "./SourceDrawer";
@@ -25,6 +26,15 @@ const STARTER_QUESTIONS = [
 export function ChatWidget() {
   const { hadmId, asOfHours, headline } = useActivePatient();
   const [open, setOpen] = useState(false);
+
+  // Close when the Talk to GRUS panel opens.
+  useEffect(() => {
+    const onOther = (e: Event) => {
+      if ((e as CustomEvent).detail !== "chat") setOpen(false);
+    };
+    window.addEventListener("grus:widget-open", onOther);
+    return () => window.removeEventListener("grus:widget-open", onOther);
+  }, []);
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -188,7 +198,12 @@ export function ChatWidget() {
 
       {/* Launcher bubble */}
       <button
-        onClick={() => setOpen((o) => !o)}
+        onClick={() =>
+          setOpen((o) => {
+            if (!o) window.dispatchEvent(new CustomEvent("grus:widget-open", { detail: "chat" }));
+            return !o;
+          })
+        }
         aria-label={open ? "Close chat" : "Open GRUS chat"}
         className="flex h-14 w-14 items-center justify-center rounded-full brand-gradient text-white shadow-lift transition hover:shadow-glow"
       >
