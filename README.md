@@ -1,197 +1,245 @@
-# GRUS — Emergency Medicine Decision Support System
+# GRUS: a voice assistant for the ICU that never says a number it can't trace
 
-An AI agent that reads a patient's entire medical record and produces a
-verified clinical brief in seconds. Every claim traces to a real
-database row. Where the record is silent, GRUS says so — instead of
-guessing.
+**GRUS** is clinical decision support for the emergency department and the resus room. It reads a patient's record and gives the care team checked answers, **on screen and by voice through Alexa**.
 
-Built for the Agents for Humans hackathon with the Strands Agents SDK,
-Amazon Bedrock, SageMaker, and Aurora PostgreSQL.
+> **The rule:** GRUS never shows or speaks a number it cannot trace to the patient's record.
 
-Decision support, not diagnosis.
+- **Live demo:** https://grus-frontend.vercel.app (demo sign-in details are on the login page)
+- **Track:** Alexa+ (self-hosted MCP server)
+- **Data:** MIMIC-IV, a public research dataset of de-identified hospital records. No real patient can be identified.
+- **Licence:** Apache-2.0
 
-## Run locally
+*Decision support, not diagnosis. The clinician always makes the call.*
 
-```
-pip install -r requirements.txt
-cp .env.example .env        # fill in DB_PASSWORD and the rest
-uvicorn grus_api:app --reload --port 8000
-```
+---
 
-Docs at `http://localhost:8000/docs`.
+## The problem
 
-## Connect the frontend
+An emergency or ICU doctor often has minutes to act on a patient whose record they haven't read. The one fact that changes the plan (a blood thinner, a falling haemoglobin, an allergy) is buried somewhere in it, and finding it takes 15–30 minutes. In the resus room the doctor's hands are busy, so they can't scroll or type at all.
 
-Frontend lives in `grus-frontend/`. Set the API base URL:
+AI summaries can help, but a confident made-up number looks exactly like a real one. **In medicine, a plausible lie is worse than no answer.** GRUS is built so that every number can be traced, and anything that can't be traced is removed before anyone sees or hears it.
 
-```
-NEXT_PUBLIC_API_URL=<your deployed API URL>
-```
+---
 
-Endpoints used: `/patients`, `/patients/{id}/brief`, `/patients/{id}/alerts`,
-`/patients/{id}/risk`, `/patients/{id}/scores/{name}`, `/chat`,
-`/admissions`.
+## What GRUS does
 
-## Demo login
+### By voice: GRUS Room (Alexa)
 
-```
-clinician@hospital-x.org  /  grus-demo
-```
+Say *"Alexa, open grus assistant"*, or put *"ask grus assistant …"* before any command. Patients are named by the last four digits of their admission number. You can say *"patient 2254"*, *"twenty two fifty four"* or *"two two five four"*.
 
-## Deploy
+| Use case | Example command |
+|---|---|
+| Who needs attention first | *"Which patients need attention first?"* |
+| Vitals | *"What are the current vitals for patient 2254?"* |
+| One lab value | *"What was the INR on arrival for patient 5843?"* |
+| Alerts | *"Any alerts for patient 2254?"* |
+| Any question about the record | *"Is patient 5843 on any blood thinners?"* |
+| Clinical score, asked one question at a time | *"Calculate the NEWS2 for patient 5843."* |
+| Ask the desk | *"Ask the desk for two units of O negative for patient 2254, stat."* |
+| Request status | *"What's the status of my requests?"* |
+| Log a note | *"Log for patient 2254: two units O negative started."* |
+| Reminder | *"Remind me to recheck the haemoglobin for patient 2254 in twenty minutes."* |
+| What happened so far | *"What have we done so far for patient 2254?"* |
+| Tamper check | *"Is the record for patient 2254 intact?"* |
+| Handover | *"Give me a handover for patient 2254."* |
+| Open / close a room | *"Start a room for patient 2254 in resus bay one."* / *"End the room for patient 2254."* |
 
-**Backend** — Elastic Beanstalk, Python 3.11 platform. `Procfile` and
-`application.py` are already set up; push the repo and deploy.
+The **Talk to GRUS** mic on the website uses the same agent.
 
-**Frontend** — Vercel. Add `NEXT_PUBLIC_API_URL`, deploy.
+### On screen: the website
 
-**AgentCore** — `python grus_agentcore_deploy.py role|ecr|build|create`
-builds and registers the containerized agent graph as a managed
-runtime.
+- **Patient board:** every patient ranked by risk, with alerts, missing information and a short spoken ID.
+- **Patient dashboard:** heart rate, blood pressure, oxygen and breathing rate, a shock-index gauge and trends. A missing reading says so instead of showing a blank.
+- **Sourced brief:** summary, red flags, current state and critical unknowns. Every claim links to its source row (100% traceable).
+- **Risk predictions** next to rule-based alerts, and **15+ validated clinical scores** (NEWS2, HEART, PERC, qSOFA, HAS-BLED, CHA₂DS₂-VASc, CURB-65, KDIGO and more).
+- **Room record:** a live, tamper-proof timeline of everything said in the room, with a **Record intact** check.
+- **Main desk:** the nursing station's live request queue (Acknowledge / Done) and reminders that pop up with a sound.
+- **Timeline slider:** see the patient exactly as the record stood at any hour.
+
+---
+
+## How "traceable" works
+
+Every entry in the record has an ID, such as `labs#301742`. GRUS attaches that ID to every number it shows or says. Then **plain code, not AI**:
+
+1. **Value check** (`grus_valuecheck.py`): every number must match the row it cites. Uncited numbers are removed.
+2. **Speculation guard:** sentences like "likely due to…" or "may suggest…" are removed.
+3. **Spoken check** (`grus_spoken.py`): a spoken sentence may only contain numbers that survived the checks above. Otherwise a rule-built sentence is spoken instead.
+
+On screen, anything removed is shown as `[REMOVED — could not be traced to source data]`, so the clinician knows something was stripped.
+
+---
 
 ## Architecture
 
-Five Strands agents run as a directed graph. Three in parallel — a
-Retriever (hybrid pgvector + keyword search over clinical notes), a
-Reconciler (checks coded data against free text), and a Risk agent
-(rule engine plus three SageMaker XGBoost models). All three converge
-on a Verifier, which confirms every claim traces to a real source
-before anything is shown. Only then does a Composer write the brief.
+```
+            ┌──────────────┐      ┌──────────────┐
+            │ Alexa skill  │      │ Web mic      │
+            │ "grus        │      │ (Talk to     │
+            │  assistant"  │      │  GRUS)       │
+            └──────┬───────┘      └──────┬───────┘
+                   │  Lambda (locked     │ POST /voice/turn
+                   │  to our skill)      │
+                   ▼                     ▼
+          ┌─────────────────────────────────────────┐
+          │ Bridge agent: Nova 2 Lite on             │
+          │ Amazon Bedrock AgentCore                 │
+          └───────────────────┬─────────────────────┘
+                              │ MCP (Streamable HTTP, bearer token)
+                              ▼  via Amazon CloudFront (HTTPS)
+   ┌──────────────────────────────────────────────────────────┐
+   │ GRUS backend: FastAPI on AWS Elastic Beanstalk            │
+   │                                                          │
+   │  /mcp        MCP server, 20 tools        (grus_mcp.py)    │
+   │  /room/...   room record API             (grus_room_api)  │
+   │  /desk/...   desk queue + reminders                       │
+   │  /patients/… brief, vitals, risk, scores  (grus_api.py)   │
+   │                                                          │
+   │  value check · speculation guard · spoken check           │
+   │                                                          │
+   │  Brief: 5 agents (Strands Agents SDK, Amazon Bedrock)    │
+   │   Retriever ─┐                                           │
+   │   Reconciler ┼─► Verifier (Nova Pro) ─► Composer         │
+   │   Risk ──────┘                                           │
+   └──────────────────────────┬───────────────────────────────┘
+                              ▼
+   ┌──────────────────────────────────────────────────────────┐
+   │ Aurora PostgreSQL + pgvector                              │
+   │  clinical record (MIMIC-IV) · hash-chained room record    │
+   └──────────────────────────────────────────────────────────┘
 
-Four agents run on Qwen 3 32B for fast structured extraction. The
-Verifier runs on Amazon Nova Pro, chosen because it bills directly
-through AWS rather than through AWS Marketplace, which this account's
-payment method didn't support for Anthropic models.
+   Website: Next.js 14 on Vercel (grus-frontend/)
+   Risk models: Amazon SageMaker · Scenario replay: EventBridge + Lambda · S3
+```
 
-## Data
+### The five brief agents
 
-MIMIC-IV, a real de-identified clinical database. 301 patients loaded
-into Aurora PostgreSQL through a purpose-built ETL pipeline; another
-20,000 processed separately for model training. Clinical notes are
-split by section — not by character count — before embedding, so a
-medication list never gets cut mid-entry.
-
-MIMIC-IV is credentialed data under a Data Use Agreement. No raw MIMIC
-files are included in this repository.
-
-## Models
-
-Fifteen validated clinical decision scores (PERC, HEART, qSOFA, KDIGO,
-and others) are encoded as data and computed deterministically — the
-model only selects which one applies.
-
-Seven XGBoost risk models were trained on 20,000 MIMIC-IV admissions
-using SageMaker. Three met the shipping bar; four were rejected, with
-the reason kept rather than discarded.
-
-### Model accuracy
-
-| Model | Status | AUC | Precision | Recall | Alert rate | Reason |
-|---|---|---|---|---|---|---|
-| AKI risk (24h) | Shipped | 0.907 | 0.73 | 0.62 | 13% | — |
-| Transfusion likelihood (12h) | Shipped | 0.892 | 0.59 | 0.54 | 6% | — |
-| Electrolyte crisis (12h) | Shipped | 0.818 | 0.43 | 0.48 | 7% | — |
-| Sepsis progression (12h) | Rejected | 0.966 | — | — | — | White cell count carried 48% of the model's weight — restating a current value, not predicting a future one. |
-| Respiratory decline (6h) | Rejected | 0.719 | 0.48 | — | 61% | Fired on 61% of all patient-hours. Noise, not signal. |
-| Bleeding progression (6h) | Rejected | — | — | — | — | Too rare in the training data (2.9% base rate) to learn reliably. |
-| Neurological decline (6h) | Rejected | — | — | — | — | Too rare in the training data (1.9% base rate) to learn reliably. |
-
-Every model is registered in SageMaker Model Registry behind a manual
-approval gate — nothing reaches a clinician automatically, including
-the three that shipped.
-
-## Files
-
-### Backend — serving
-
-| File | What it does |
+| Agent | Job |
 |---|---|
-| `grus_api.py` | FastAPI backend. Every endpoint the frontend calls. |
-| `grus_agents.py` | The five-agent Strands graph — Retriever, Reconciler, Risk, Verifier, Composer. |
-| `grus_composer.py` | Assembles the source data block and generates the brief. |
-| `grus_verifier.py` | Deterministic pass that strips any claim without a real source. |
-| `grus_tools.py` | The tool functions agents call — labs, vitals, meds, notes, history. |
-| `grus_retriever.py` | Hybrid retrieval — pgvector semantic search plus keyword matching. |
-| `grus_rules.py` | Nine deterministic clinical rules. No model involved. |
-| `grus_scores.py` | Fifteen clinical decision scores, encoded as data. |
-| `grus_score_engine.py` | Computes a score from the record; reports what's missing rather than guessing. |
-| `grus_risk_score.py` | Calls the three SageMaker risk endpoints at inference time. |
-| `grus_chat.py` | Grounded chat assistant — answers only from retrieved, cited facts. |
-| `grus_note_split.py` | Splits a pasted clinical note by section rather than by character count. |
-| `grus_config.py` | Central configuration — database, region, model IDs, all read from the environment. |
+| **Retriever** | Collects labs, vitals, notes, medications and prior visits, each with its source ID. Doesn't interpret. |
+| **Reconciler** | Builds one timeline and flags contradictions (e.g. a stop time before a start time). Cites both sides; doesn't pick one. |
+| **Risk** | Reports risk from published rules and from models trained on 20,000 admissions, and shows both if they disagree. |
+| **Verifier** | Runs on Amazon Nova Pro. Checks every claim against the source rows → VERIFIED / REJECTED. |
+| **Composer** | Writes the brief, copying every value and ID from the verified data. |
 
-### Data pipeline — offline, run once
+Retriever, Reconciler and Risk run in parallel. The other agents run on Qwen 3 32B.
 
-| File | What it does |
+### The room record
+
+`grus_room.py` stores every room action (log, desk request, reminder, score, handover) in an **append-only, hash-chained** table:
+
+```
+hash = sha256(previous_hash | admission | seq | kind | actor | created_at | body)
+```
+
+Database triggers block `UPDATE`, `DELETE` and `TRUNCATE`. `GET /room/{id}/verify` recomputes the chain and names the first broken entry if anything was changed.
+
+### MCP tools (20)
+
+`triage_board` · `find_patient` · `current_vitals` · `lab_value` · `get_alerts` · `ask_record` · `calculate_score` · `answer_score_question` · `start_room` · `end_room` · `log_event` · `send_request` · `list_requests` · `update_request` · `set_reminder` · `check_reminders` · `query_timeline` · `recall` · `prepare_handover` · `verify_record`
+
+The server implements MCP spec **2025-11-25** over Streamable HTTP (stateless, JSON responses), with a bearer-token and Origin check.
+
+---
+
+## Repository layout
+
+```
+grus_api.py          FastAPI app: patients, brief, vitals, risk, scores, chat
+grus_mcp.py          MCP server (20 tools), mounted at /mcp
+grus_room.py         Hash-chained room record, desk requests, reminders
+grus_room_api.py     Website API for the Room and Desk pages
+grus_voice.py        /voice/turn: web mic → the same agent Alexa uses
+grus_valuecheck.py   Value check + speculation guard
+grus_spoken.py       Turns checked text into safe spoken sentences
+grus_agents.py       The five-agent brief graph (Strands)
+grus_score_engine.py Clinical scores, computed in code
+grus_scores.py       Score definitions (15+ validated scores)
+grus_rules.py        Rule-based alerts
+grus_tools.py        Record lookups used by the agents
+grus_config.py       All settings, read from environment variables
+setup_room.py        One-time creation of the room tables
+test_mcp.py          End-to-end MCP test client
+grus-frontend/       Next.js website
+```
+
+---
+
+## Run it yourself
+
+### 1. Backend
+
+Requires Python 3.11+, a PostgreSQL database with the GRUS schema (`Grus schema.sql`) and MIMIC-IV data loaded, and AWS credentials with Amazon Bedrock access.
+
+```bash
+pip install -r requirements.txt
+cp .env.example .env          # then fill in your own values (see below)
+python setup_room.py          # one time: creates the room tables
+uvicorn grus_api:app --reload --port 8000
+```
+
+API docs: `http://localhost:8000/docs`
+
+**Environment variables** (never commit real values):
+
+| Variable | What it is |
 |---|---|
-| `grus_etl_tier1.py` | Loads the core 301-patient cohort from MIMIC-IV into Aurora. |
-| `grus_etl_prior.py` | Loads prior admissions for patients with more than one visit. |
-| `grus_notes_pipeline.py` | Chunks discharge notes by clinical section. |
-| `grus_embed.py` | Generates Titan embeddings for note chunks, stored via pgvector. |
-| `grus_fix_cohorts.py` | Version-aware cohort reclassification (ICD-9 vs ICD-10 handling). |
+| `GRUS_DB_HOST`, `GRUS_DB_PORT`, `GRUS_DB_NAME`, `GRUS_DB_USER`, `DB_PASSWORD` | PostgreSQL connection |
+| `GRUS_DB_SCHEMA` | Schema name (default `grus`) |
+| `AWS_REGION` | Region for Bedrock and the database |
+| `GRUS_FAST_MODEL`, `GRUS_REASONING_MODEL` | Bedrock model IDs (defaults: Qwen 3 32B, Nova Pro) |
+| `GRUS_MCP_TOKENS` | MCP access tokens, as `token=name,token2=name2` |
+| `GRUS_MCP_ALLOWED_ORIGINS` | Optional comma-separated list of allowed origins |
+| `GRUS_MCP_DEV=1` | Local testing only: skips the token check |
+| `GRUS_ROOM_TZ` | Time zone for room times (default `Asia/Kolkata`) |
+| `GRUS_VOICE_RUNTIME_ARN`, `GRUS_VOICE_REGION` | The AgentCore runtime used by the web mic |
 
-### Machine learning
+### 2. Test the MCP server
 
-| File | What it does |
-|---|---|
-| `grus_risk_features.py` | Builds the training feature set — point-in-time correct, no future leakage. |
-| `grus_risk_train.py` | Trains and evaluates the seven candidate XGBoost models. |
-| `grus_sagemaker.py` | Training jobs, model registry, and serverless endpoint deployment on SageMaker. |
-| `grus_scenario_search.py` | Searches MIMIC for a real deterioration trajectory (documents why the live demo uses a labelled synthetic scenario instead). |
+```bash
+GRUS_MCP_DEV=1 uvicorn grus_api:app --port 8000
+python test_mcp.py                        # local
+python test_mcp.py https://<your-host>/mcp  # deployed (needs a token)
+```
 
-### Live data / simulation
+### 3. Connect Alexa
 
-| File | What it does |
-|---|---|
-| `grus_scenario.py` | Defines and replays a synthetic patient scenario locally. |
-| `grus_eventbridge_setup.py` | Deploys the EventBridge schedule and Lambda that feed live vitals into Aurora. |
-| `lambda_function.py` | The Lambda handler — reads a scenario from S3, writes the next hour of vitals/labs. |
+GRUS uses the open-source **[alexa-skill-mcp-bridge](https://github.com/KayLerch/alexa-skill-mcp-bridge)**, which deploys an Alexa skill, a Lambda and an agent on Amazon Bedrock AgentCore that calls any MCP server.
 
-### Deployment
+1. Clone the bridge and follow its setup.
+2. In `bridge.config.ts`, set:
+   - the MCP server URL: `https://<your-host>/mcp`
+   - auth: `{ type: 'bearer', secretName: '<your-secret-name>' }`, with the token stored in AWS Secrets Manager
+   - the invocation name: `'grus assistant'`
+3. Deploy with CDK and the ASK CLI as the bridge's README describes.
+4. Add the same token to `GRUS_MCP_TOKENS` on the backend.
 
-| File | What it does |
-|---|---|
-| `application.py` | Elastic Beanstalk WSGI/ASGI entrypoint. |
-| `Procfile` | Tells Elastic Beanstalk how to start the app (uvicorn). |
-| `Dockerfile` | Container build for AgentCore deployment. |
-| `grus_agentcore.py` | AgentCore entrypoint wrapping the agent graph. |
-| `grus_agentcore_deploy.py` | Builds, pushes, and registers the AgentCore runtime. |
-| `requirements.txt` | Python dependencies for the FastAPI backend. |
-| `requirements-agentcore.txt` | Python dependencies for the AgentCore container. |
+The bridge config holds your server URL and secret name, so keep it out of public repos.
 
-### Utility scripts
+### 4. Website
 
-| File | What it does |
-|---|---|
-| `add_prior_history.py` | Manually attaches a prior admission to a patient, for demo purposes. |
-| `cleanup_test_patients.py` | Removes synthetic test patients from Aurora. |
+```bash
+cd grus-frontend
+npm install
+cp .env.local.example .env.local   # set NEXT_PUBLIC_API_BASE to your backend URL
+npm run dev
+```
 
-### Documentation
+Open `http://localhost:3000`. If the backend can't be reached, the website falls back to built-in demo data so it still renders.
 
-| File | What it does |
-|---|---|
-| `GRUS-Phase1-Conclusion.md` | Write-up of the initial MIMIC-IV data exploration and cohort selection. |
-| `GRUS-Project-Reference_2.md` | Running project reference — schema, decisions, file map. |
-| `Grus-filesMap.md` | Map of every file in the project and its purpose. |
-| `Grus schema.sql` | Full Aurora schema — sixteen tables, no patient data. |
+---
 
-## Known limitations
+## Built with
 
-- Aurora is currently reachable from a broad IP range rather than
-  locked to the application's VPC. Scoped access is the next step once
-  the backend's own network location is finalised.
-- IAM policies on the deployment user are broader than they need to be
-  for day-to-day operation; tightening them to the specific resource
-  ARNs used is planned but not yet done.
-- The database password is passed as a Lambda environment variable
-  rather than pulled from Secrets Manager at runtime — a deliberate
-  tradeoff to avoid the cost of a VPC interface endpoint for a
-  hackathon deployment.
-- AgentCore deployment is containerised and registered (status READY)
-  but invocation currently returns an error under investigation. The
-  primary serving path is the FastAPI backend on Elastic Beanstalk,
-  which is fully functional.
+Alexa Skills Kit · Amazon Bedrock · Amazon Bedrock AgentCore · Amazon Nova (Nova Pro, Nova 2 Lite) · Qwen 3 32B · Model Context Protocol · Strands Agents SDK · Amazon CloudFront · AWS Lambda · AWS Elastic Beanstalk · Amazon Aurora PostgreSQL + pgvector · Amazon SageMaker · Amazon S3 · Amazon EventBridge · AWS Secrets Manager · Python · FastAPI · Next.js · TypeScript · Tailwind CSS · Vercel · Web Speech API · MIMIC-IV
 
-## License
+## Responsible use
 
-Apache 2.0. See `LICENSE`.
+- **Decision support, not diagnosis.** GRUS doesn't diagnose or prescribe.
+- **Demo data only:** de-identified MIMIC-IV. Not for clinical use.
+- **Deployment path:** Amazon ended third-party HIPAA-eligible Alexa skills in December 2022. A hospital deployment would use **Alexa Smart Properties for Healthcare** and comply with local law (e.g. India's DPDP Act 2023) and clinical decision-support rules (CDSCO / FDA).
+
+## Licence
+
+Apache-2.0. See [LICENSE](LICENSE).
+
