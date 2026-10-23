@@ -66,7 +66,11 @@ support, not diagnosis.
 
 Rules:
 1. Every patient tool needs `patient`: the last 4 digits of the admission
-   number the clinician says ("patient ending 2254"). If a tool says the
+   number the clinician says ("patient ending 2254"). Speech often arrives
+   as words: "twenty two fifty four", "two two five four" and "fifty eight
+   forty three" all mean digits. Pass the words exactly as heard in
+   `patient` and call the tool; the server converts them. Never ask the
+   clinician to repeat a number they already said. If a tool says the
    digits match more than one patient, ask for more digits.
 2. Say the `text` of each result word for word. It has already been
    checked against the record. Do not add units, explanations, medical
@@ -153,12 +157,73 @@ def _speak_hours(text):
                   lambda m: when(float(m.group(1))) or m.group(0), text)
 
 
+_ONES = {"zero": 0, "oh": 0, "o": 0, "one": 1, "two": 2, "three": 3,
+         "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9}
+_TEENS = {"ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13,
+          "fourteen": 14, "fifteen": 15, "sixteen": 16, "seventeen": 17,
+          "eighteen": 18, "nineteen": 19}
+_TENS = {"twenty": 20, "thirty": 30, "forty": 40, "fourty": 40, "fifty": 50,
+         "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90}
+
+
+def spoken_digits(text):
+    """
+    Digits from a spoken number, as speech recognition writes it.
+    "2254", "twenty two fifty four", "two two five four", "twenty-two
+    fifty-four", "two thousand two hundred fifty four" -> "2254".
+    Number words read left to right as the digit groups people say;
+    "hundred"/"thousand" are read as a whole number.
+    """
+    t = str(text or "").lower().replace("-", " ")
+    if re.sub(r"\D", "", t) and not re.search(r"[a-z]", re.sub(
+            r"\b(patient|ending|in|number|admission|id|the|for|of|and)\b",
+            "", t)):
+        return re.sub(r"\D", "", t)
+    words = re.findall(r"[a-z]+|\d+", t)
+    if any(w in ("hundred", "thousand") for w in words):
+        total, cur = 0, 0
+        for w in words:
+            if w.isdigit():
+                cur += int(w)
+            elif w in _ONES:
+                cur += _ONES[w]
+            elif w in _TEENS:
+                cur += _TEENS[w]
+            elif w in _TENS:
+                cur += _TENS[w]
+            elif w == "hundred":
+                cur = (cur or 1) * 100
+            elif w == "thousand":
+                total += (cur or 1) * 1000
+                cur = 0
+        n = total + cur
+        return str(n) if n else ""
+    out, i = "", 0
+    while i < len(words):
+        w = words[i]
+        if w.isdigit():
+            out += w
+        elif w in _TENS:
+            nxt = words[i + 1] if i + 1 < len(words) else ""
+            if nxt in _ONES and _ONES[nxt] > 0:
+                out += str(_TENS[w] + _ONES[nxt])
+                i += 1
+            else:
+                out += str(_TENS[w])
+        elif w in _TEENS:
+            out += str(_TEENS[w])
+        elif w in _ONES:
+            out += str(_ONES[w])
+        i += 1
+    return out
+
+
 def resolve_patient(conn, patient):
     """
     Spoken digits -> one current admission. Never guesses: no match or
     several matches is an answer the clinician hears.
     """
-    digits = re.sub(r"\D", "", str(patient or ""))
+    digits = spoken_digits(patient)
     if len(digits) < 3:
         raise ToolError("Which patient? Say the last four digits of the "
                         "admission number.")
@@ -191,7 +256,7 @@ def _result(text, data=None, error=False):
 # ------------------------------------------------------- patient tools
 
 def t_find_patient(conn, a, actor):
-    digits = re.sub(r"\D", "", str(a.get("digits", "")))
+    digits = spoken_digits(a.get("digits", ""))
     if len(digits) < 2:
         raise ToolError("Say at least two digits of the admission number.")
     rows = conn.execute("""
@@ -883,8 +948,11 @@ def t_verify_record(conn, a, actor):
 # ------------------------------------------------------------ registry
 
 _P = {"patient": {"type": "string",
-                  "description": "Last 4 digits of the admission number, "
-                                 "e.g. '2254'."}}
+                  "description": "Last 4 digits of the admission number "
+                                 "as heard: '2254', 'twenty two fifty "
+                                 "four' or 'two two five four'. Pass "
+                                 "spoken words through unchanged; the "
+                                 "server converts them."}}
 
 
 def _schema(props=None, required=()):
